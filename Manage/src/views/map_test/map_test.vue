@@ -3018,7 +3018,7 @@ function runBatchEvacuationPlanning(options = {}) {
     return
   }
 
-  const executionPromise = runBatchEvacuationWithPreferredExecutor({
+  apiRunEvacuationPlanning({
     roads,
     buildingEntrances,
     parkEntrances,
@@ -3026,9 +3026,8 @@ function runBatchEvacuationPlanning(options = {}) {
     frame: currentDiffusionFrame.value,
     gas: diffusionMeta.value.gas,
     blockedMask: diffusionMeta.value.blockedMask,
-  })
-  Promise.resolve(executionPromise).then(execution => {
-    const result = execution.result
+  }).then(resp => {
+    const result = resp.success ? resp.data : null
     evacuationPlanningMode.value = 'all'
     evacuationDisplayMode.value = options.displayMode || evacuationDisplayMode.value
     evacuationPlan.value = null
@@ -3038,12 +3037,8 @@ function runBatchEvacuationPlanning(options = {}) {
     render()
 
     if (options.silent) return
-    if (!result.hasAnySuccess) {
-      showToast(result.message || '当前帧所有建筑均无安全逃生路径', 'warn')
-      return
-    }
-    if (execution.executionMode === 'local-fallback') {
-      showToast(`Worker 未接入批量逃生规划算法，已回退本地计算: ${execution.fallbackReason}`, 'warn')
+    if (!result?.hasAnySuccess) {
+      showToast(result?.message || '当前帧所有建筑均无安全逃生路径', 'warn')
       return
     }
     showToast(`已生成 ${result.successCount} 栋建筑的逃生路径，阻断 ${result.blockedCount} 栋`, 'success')
@@ -3994,11 +3989,6 @@ watch(() => diffusionState.currentFrame, () => {
     if (sensor) showSensorInfo(sensor)
   }
   syncCarMobileSensors()
-  if (evacuationBatchResult.value?.routesByBuilding?.length) {
-    runBatchEvacuationPlanning({ silent: true })
-  } else if (evacuationPlan.value?.success) {
-    runEvacuationPlanning({ silent: true })
-  }
 })
 watch(() => diffusionForm.gasId, () => {
   const nextValidation = syncDiffusionSourceSelection()
