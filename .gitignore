@@ -1,0 +1,45 @@
+# Java
+target/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+
+# Node
+node_modules/
+dist/
+npm-debug.log*
+
+# Python
+python/.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pt
+.venv/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+*.log
+hs_err_pid*.log
+replay_pid*.log
+
+# Project temp
+omc/
+.claude/
+.omc/
+
+# ML models
+*.pt
+*.pth
+yolo11m.pt

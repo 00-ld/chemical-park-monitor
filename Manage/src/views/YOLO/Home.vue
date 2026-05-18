@@ -1,0 +1,485 @@
+<template>
+  <div class="big-screen-container">
+    <header class="screen-header">
+      <div class="header-bg-line"></div>
+      <div class="header-left">
+        <span class="time-box">{{ currentTime }}</span>
+        <span class="weather-tag">环境温感：24.5°C</span>
+      </div>
+      <div class="header-center">
+        <div class="main-title">智慧化工园区 - 自动化图像巡检指挥中心</div>
+        <div class="sub-title-line">SMART CHEMICAL PARK IMAGE INSPECTION SYSTEM</div>
+      </div>
+      <div class="header-right">
+        <div class="status-indicator">
+          <span class="dot" :class="{ 'is-active': isAutoPolling }"></span>
+          任务状态: {{ isAutoPolling ? 'AI实时分析中' : '系统就绪' }}
+        </div>
+      </div>
+    </header>
+
+    <el-row :gutter="15" class="screen-body">
+      <el-col :span="6">
+        <div class="data-box panel-left-top">
+          <div class="box-title"><el-icon><DataLine /></el-icon> 实时人员密度监测</div>
+          <div ref="gaugeRef" class="chart-container"></div>
+          <div class="metric-grid">
+            <div class="metric-card">
+              <div class="m-label">当前识别</div>
+              <div class="m-value color-blue">{{ currentCount }}<span>人</span></div>
+            </div>
+            <div class="metric-card">
+              <div class="m-label">识别耗时</div>
+              <div class="m-value color-green">{{ analysisTime }}<span>ms</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="data-box panel-left-bottom">
+          <div class="box-title"><el-icon><PieChart /></el-icon> 区域风险分布</div>
+          <div ref="pieRef" class="chart-container-small"></div>
+        </div>
+
+        <div class="data-box panel-left-bottom">
+          <div class="box-title"><el-icon><TrendCharts /></el-icon> 近1小时巡检量趋势</div>
+          <div ref="lineRef" class="chart-container-small"></div>
+        </div>
+      </el-col>
+
+      <el-col :span="12">
+        <div class="data-box main-video-panel">
+          <div class="video-header">
+            <div class="cam-name">
+              <span class="live-tag">LIVE</span> 核心作业区-A7摄像头
+            </div>
+            <div class="task-progress" v-if="imageQueue.length > 0">
+              进度: {{ currentIndex + 1 }} / {{ imageQueue.length }}
+            </div>
+          </div>
+
+          <div class="display-area" v-loading="loading" element-loading-background="rgba(0, 0, 0, 0.7)">
+            <div class="corner-line top-left"></div>
+            <div class="corner-line top-right"></div>
+            <div class="corner-line bottom-left"></div>
+            <div class="corner-line bottom-right"></div>
+
+            <div v-if="resultImage" class="img-container">
+              <el-image :src="resultImage" fit="contain" class="main-img" />
+              <div class="scanner-line" v-if="isAutoPolling"></div>
+            </div>
+
+            <div v-else class="upload-guide" @click="triggerUpload">
+              <div class="radar-circle"></div>
+              <el-icon class="guide-icon"><VideoCamera /></el-icon>
+              <p>点击导入巡检素材</p>
+              <span>SUPPORT: JPG/PNG BATCH MODE</span>
+            </div>
+          </div>
+
+          <div class="control-footer">
+            <input type="file" ref="fileInput" style="display:none" multiple accept="image/*" @change="handleFileSelect" />
+            <el-button-group>
+              <el-button type="primary" :icon="UploadFilled" @click="triggerUpload" :disabled="isAutoPolling">导入素材</el-button>
+              <el-button type="success" :icon="CaretRight" @click="toggleAutoPolling" :disabled="imageQueue.length === 0 || isAutoPolling">启动巡检</el-button>
+              <el-button type="danger" :icon="RefreshRight" @click="resetTask">重置任务</el-button>
+            </el-button-group>
+            <div class="queue-info">待处理队列: {{ Math.max(0, imageQueue.length - currentIndex) }} 张</div>
+          </div>
+        </div>
+      </el-col>
+
+      <el-col :span="6">
+        <div class="data-box log-panel">
+          <div class="box-title"><el-icon><List /></el-icon> 实时巡检流水</div>
+          <div class="log-list-wrapper">
+            <transition-group name="list" tag="div">
+              <div v-for="log in detectionLogs" :key="log.id" class="log-item" :class="{ 'warning-log': log.count > 5 }">
+                <div class="log-header">
+                  <span class="log-time">{{ log.time }}</span>
+                  <el-tag size="small" :type="log.count > 5 ? 'danger' : 'success'">
+                    {{ log.count > 5 ? '异常' : '正常' }}
+                  </el-tag>
+                  <el-button text size="small" @click="delLog(log.id)" style="color:#f56c6c;margin-left:6px">删除</el-button>
+                </div>
+                <div class="log-content">
+                  检测到人员：<strong>{{ log.count }}</strong>，位置：{{ log.location }}
+                </div>
+              </div>
+            </transition-group>
+          </div>
+        </div>
+
+        <div class="data-box alert-panel">
+          <div class="box-title">安全运行天数</div>
+          <div class="safety-days">1,284<span>Days</span></div>
+        </div>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
+import axios from 'axios'
+import { ElMessage } from 'element-plus'
+import {
+  UploadFilled,
+  VideoCamera,
+  DataLine,
+  PieChart,
+  TrendCharts,
+  List,
+  CaretRight,
+  RefreshRight
+} from '@element-plus/icons-vue'
+import * as echarts from 'echarts'
+
+// --- 类型定义 ---
+interface DetectionLog {
+  id: number
+  time: string
+  location: string
+  count: number
+}
+
+// --- 状态变量 ---
+const resultImage = ref('')
+const loading = ref(false)
+const currentTime = ref('')
+const analysisTime = ref(0)
+const currentCount = ref(0)
+const isAutoPolling = ref(false)
+const imageQueue = ref<File[]>([])
+const currentIndex = ref(0)
+const detectionLogs = ref<DetectionLog[]>([])
+const fileInput = ref<HTMLInputElement | null>(null)
+
+// 定时器引用
+let pollingTimer: ReturnType<typeof setTimeout> | null = null
+
+// Echarts 引用与实例
+const gaugeRef = ref<HTMLElement | null>(null)
+const pieRef = ref<HTMLElement | null>(null)
+const lineRef = ref<HTMLElement | null>(null)
+let gaugeChart: echarts.ECharts | null = null
+let pieChart: echarts.ECharts | null = null
+let lineChart: echarts.ECharts | null = null
+
+// 加载数据库全部日志
+const loadLogList = async () => {
+  const res = await axios.get("http://localhost:8081/api/analysis/list")
+  detectionLogs.value = res.data.map((item: { id: number; createTime: string; location: string; personCount: number }) => {
+    return {
+      id: item.id,
+      time: new Date(item.createTime).toLocaleTimeString(),
+      location: item.location,
+      count: item.personCount
+    }
+  })
+}
+
+// 删除单条日志
+const delLog = async (id: number) => {
+  await axios.delete(`http://localhost:8081/api/analysis/delete/${id}`)
+  await loadLogList()
+  ElMessage.success("删除成功")
+}
+
+// --- 初始化图表 ---
+const initCharts = () => {
+  if (gaugeRef.value) {
+    gaugeChart = echarts.init(gaugeRef.value, 'dark')
+    gaugeChart.setOption({
+      backgroundColor: 'transparent',
+      series: [{
+        type: 'gauge', min: 0, max: 20, splitNumber: 4,
+        axisLine: { lineStyle: { width: 6, color: [[0.3, '#67C23A'], [0.7, '#E6A23C'], [1, '#F56C6C']] } },
+        pointer: { width: 3 },
+        detail: { fontSize: 20, color: '#fff', offsetCenter: [0, '70%'], formatter: '{value}' },
+        data: [{ value: 0 }]
+      }]
+    })
+  }
+
+  if (pieRef.value) {
+    pieChart = echarts.init(pieRef.value, 'dark')
+    pieChart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'item' },
+      series: [{
+        type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: false,
+        itemStyle: { borderRadius: 10, borderColor: '#102038', borderWidth: 2 },
+        label: { show: false },
+        data: [
+          { value: 10, name: '生产A区' }, { value: 5, name: '仓储区' }, { value: 15, name: '装卸站' }
+        ]
+      }]
+    })
+  }
+
+  if (lineRef.value) {
+    lineChart = echarts.init(lineRef.value, 'dark')
+    lineChart.setOption({
+      backgroundColor: 'transparent',
+      grid: { top: 10, bottom: 20, left: 30, right: 10 },
+      xAxis: { type: 'category', data: ['10:00', '10:15', '10:30', '10:45', '11:00'], axisLine: { show: false } },
+      yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1a3a61' } } },
+      series: [{ data: [12, 18, 15, 25, 21], type: 'line', smooth: true, areaStyle: { color: 'rgba(0, 242, 254, 0.2)' } }]
+    })
+  }
+}
+
+// --- 核心逻辑函数 ---
+const updateTime = () => { currentTime.value = new Date().toLocaleString() }
+
+const stopPolling = () => {
+  isAutoPolling.value = false
+  if (pollingTimer) {
+    clearTimeout(pollingTimer)
+    pollingTimer = null
+  }
+}
+
+const triggerUpload = () => fileInput.value?.click()
+
+const handleFileSelect = (e: Event) => {
+  const target = e.target as HTMLInputElement
+  const files = Array.from(target.files || []) as File[]
+  if (files.length > 0) {
+    imageQueue.value = files
+    currentIndex.value = 0
+    resultImage.value = ''
+    ElMessage.success({ message: `系统已就绪，导入 ${files.length} 组巡检数据`, plain: true })
+  }
+}
+
+const analyzeImage = async (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const start = Date.now()
+  try {
+    const res = await axios.post('http://localhost:8081/api/analysis/person', formData)
+    if (res.data.status === 'success') {
+      resultImage.value = res.data.image_base64
+      analysisTime.value = Date.now() - start
+      currentCount.value = res.data.count
+
+      gaugeChart?.setOption({ series: [{ data: [{ value: res.data.count }] }] })
+      // 分析完成 重新拉取数据库列表
+      await loadLogList()
+    }
+  } catch (err) {
+    stopPolling()
+    ElMessage.error("算法节点响应超时，请检查后端服务")
+  }
+}
+
+const toggleAutoPolling = () => {
+  if (imageQueue.value.length === 0) return
+  isAutoPolling.value = true
+  runPollingTask()
+}
+
+const runPollingTask = async () => {
+  if (!isAutoPolling.value) return
+
+  if (currentIndex.value >= imageQueue.value.length) {
+    stopPolling()
+    ElMessage.success("巡检任务完成")
+    return
+  }
+
+  await analyzeImage(imageQueue.value[currentIndex.value])
+  currentIndex.value++
+
+  pollingTimer = setTimeout(runPollingTask, 2500)
+}
+
+const resetTask = () => {
+  stopPolling()
+  imageQueue.value = []
+  currentIndex.value = 0
+  resultImage.value = ''
+  currentCount.value = 0
+  analysisTime.value = 0
+  gaugeChart?.setOption({ series: [{ data: [{ value: 0 }] }] })
+  ElMessage.info("任务已重置")
+}
+
+// --- 生命周期 ---
+onMounted(() => {
+  updateTime()
+  const timer = setInterval(updateTime, 1000)
+  initCharts()
+  // 页面初始化加载数据库日志
+  loadLogList()
+
+  const handleResize = () => {
+    gaugeChart?.resize()
+    pieChart?.resize()
+    lineChart?.resize()
+  }
+  window.addEventListener('resize', handleResize)
+
+  onUnmounted(() => {
+    clearInterval(timer)
+    stopPolling()
+    window.removeEventListener('resize', handleResize)
+  })
+})
+</script>
+
+<style scoped>
+/* 核心容器 - 建议找一张科技感深色背景图 */
+.big-screen-container {
+  min-height: 100vh;
+  background: #020b1a url('https://img.zcool.cn/community/0173695d3298c5a801214847be73be.jpg@2o.jpg') no-repeat center;
+  background-size: cover;
+  color: #fff;
+  padding: 0 20px 20px 20px;
+  overflow: hidden;
+  font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+}
+
+/* 科技感头部 */
+.screen-header {
+  height: 80px;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.header-bg-line {
+  position: absolute;
+  bottom: 0; left: 0; width: 100%; height: 2px;
+  background: linear-gradient(90deg, transparent, #00f2fe, transparent);
+}
+.main-title {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  background: linear-gradient(to bottom, #fff, #00f2fe);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 15px rgba(0, 242, 254, 0.5);
+}
+.sub-title-line { font-size: 10px; color: #3a5a85; text-align: center; letter-spacing: 1px; }
+
+/* 边框盒子美化 */
+.data-box {
+  background: rgba(6, 30, 61, 0.8);
+  border: 1px solid #1a3a61;
+  padding: 15px;
+  margin-bottom: 15px;
+  position: relative;
+  box-shadow: inset 0 0 15px rgba(0, 242, 254, 0.1);
+}
+.box-title {
+  font-size: 14px;
+  color: #00f2fe;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(0, 242, 254, 0.2);
+  padding-bottom: 8px;
+}
+
+/* 图表容器 */
+.chart-container { height: 180px; }
+.chart-container-small { height: 140px; }
+
+/* 核心展示面板 */
+.main-video-panel { border: 1px solid rgba(0, 242, 254, 0.5); padding: 5px; }
+.video-header {
+  display: flex; justify-content: space-between; padding: 5px 10px;
+  background: rgba(0, 242, 254, 0.1); font-size: 12px; color: #00f2fe;
+}
+.live-tag {
+  background: #f56c6c; color: #fff; padding: 0 4px; border-radius: 2px;
+  margin-right: 5px; font-weight: bold; animation: blink 1s infinite;
+}
+
+.display-area {
+  height: 540px;
+  background: #000;
+  position: relative;
+  border: 1px solid #1a3a61;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+.img-container { width: 100%; height: 100%; position: relative; }
+.main-img { width: 100%; height: 100%; }
+
+/* 四角装饰线 */
+.corner-line { position: absolute; width: 15px; height: 15px; border: 2px solid #00f2fe; }
+.top-left { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+.top-right { top: -2px; right: -2px; border-left: 0; border-bottom: 0; }
+.bottom-left { bottom: -2px; left: -2px; border-right: 0; border-top: 0; }
+.bottom-right { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
+
+/* 扫描线动画 */
+.scanner-line {
+  position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+  background: linear-gradient(to right, transparent, #00f2fe, transparent);
+  box-shadow: 0 0 8px #00f2fe;
+  animation: scan 3s linear infinite;
+  z-index: 10;
+}
+@keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+
+/* 引导雷达动画 */
+.upload-guide { text-align: center; color: #3a5a85; cursor: pointer; }
+.radar-circle {
+  position: absolute; width: 150px; height: 150px; top: 50%; left: 50%;
+  margin: -75px 0 0 -75px; border: 1px solid #00f2fe; border-radius: 50%;
+  animation: radar 2s infinite;
+}
+@keyframes radar { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
+.guide-icon { font-size: 60px; margin-bottom: 10px; color: #1a3a61; }
+
+/* 指标数值 */
+.metric-grid { display: flex; gap: 10px; margin-top: 10px; }
+.metric-card { flex: 1; background: rgba(0, 242, 254, 0.05); padding: 10px; border-radius: 4px; text-align: center; }
+.m-label { font-size: 11px; color: #8492a6; margin-bottom: 5px; }
+.m-value { font-size: 22px; font-weight: bold; }
+.m-value span { font-size: 12px; margin-left: 4px; color: #fff; }
+.color-blue { color: #00f2fe; }
+.color-green { color: #67C23A; }
+
+/* 日志流水 */
+.log-list-wrapper { height: 320px; overflow-y: auto; padding-right: 5px; }
+.log-item {
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 8px; padding: 10px; border-left: 3px solid #00f2fe;
+  transition: all 0.3s;
+}
+.warning-log { border-left-color: #F56C6C; background: rgba(245, 108, 108, 0.05); }
+.log-header { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 11px; }
+.log-time { color: #8492a6; }
+.log-content { font-size: 12px; color: #eee; }
+
+/* 状态灯动画 */
+.status-indicator { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #00f2fe; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #909399; }
+.is-active { background: #67C23A; box-shadow: 0 0 10px #67C23A; animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: 0.3; } }
+
+.safety-days { font-size: 42px; color: #E6A23C; text-align: center; font-weight: bold; font-family: 'Impact'; }
+.safety-days span { font-size: 14px; margin-left: 8px; color: #8492a6; font-weight: normal; }
+
+.control-footer { margin-top: 15px; display: flex; justify-content: space-between; align-items: center; }
+.queue-info { font-size: 12px; color: #8492a6; }
+
+/* 列表动画 */
+.list-enter-active, .list-leave-active { transition: all 0.5s ease; }
+.list-enter-from { opacity: 0; transform: translateX(-30px); }
+
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: #1a3a61; border-radius: 2px; }
+</style>

@@ -1,0 +1,222 @@
+"""Coarse grid search for gas source candidate regions.
+
+Performs a grid-based search over sensor signals to identify candidate
+areas where the gas leak source is most likely located. Uses distance-
+weighted signal matching with support count and error scoring.
+
+Typical usage:
+    result = run_coarse_search(payload)
+"""
+
+from __future__ import annotations
+
+import math
+from typing import Dict, List
+
+from .pinn_dataset import normalize_coarse_search_payload
+
+MAP_METERS_PER_UNIT = 0.5
+ORIGIN_LONGITUDE = 118.78
+ORIGIN_LATITUDE = 32.04
+BASE_ALTITUDE = 18.0
+
+
+def run_coarse_search(payload: Dict) -> Dict:
+    """Run a coarse grid search for candidate gas source regions.
+
+    Iterates over a grid of candidate points, evaluates weighted error
+    and influence scores against active sensor observations, and returns
+    the top-ranked non-overlapping candidate regions.
+
+    Args:
+        payload: Request payload with sensor data and search config.
+
+    Returns:
+        Dictionary with candidateRegions list and search metadata.
+    """
+    dataset = normalize_coarse_search_payload(payload)
+    config = dataset["config"]
+    sensors = build_active_sensors(
+        sensors=dataset.get("sensors") or [],
+        current_frame_index=int(dataset.get("currentFrameIndex") or 0),
+        min_observation_threshold=float(config.get("minObservationThreshold") or 0),
+    )
+    if not sensors:
+        return {
+            "candidateRegions": [],
+            "meta": {
+                "gasId": dataset.get("gas", {}).get("gasId") or dataset.get("gas", {}).get("id") or "",
+                "activeSensorCount": 0,
+                "currentFrameIndex": int(dataset.get("currentFrameIndex") or 0),
+                "frameTimeSec": dataset.get("frameTimeSec") or 0,
+                "gridStep": config["gridStep"],
+                "topK": config["topK"],
+                "candidateRadius": config["candidateRadius"],
+                "minObservationThreshold": config["minObservationThreshold"],
+            },
+        }
+
+    max_observed = max(max(sensor["observedSignal"] for sensor in sensors), 1.0)
+    candidates = []
+    for x in range(40, 961, int(config["gridStep"])):
+        for y in range(40, 611, int(config["gridStep"])):
+            weighted_error = 0.0
+            influence_score = 0.0
+            support_count = 0
+
+            for sensor in sensors:
+                distance = max(math.hypot(sensor["x"] - x, sensor["y"] - y), 1.0)
+                predicted = 1 / (1 + distance / float(config["distanceScale"]))
+                observed = sensor["observedSignal"] / max_observed
+                error = abs(predicted - observed)
+                weighted_error += error * (1 + sensor["priority"] * 0.18)
+                influence_score += predicted * observed
+                if distance <= float(config["supportRadius"]):
+                    support_count += 1
+
+            normalized_error = weighted_error / len(sensors)
+            support_ratio = support_count / len(sensors)
+            score = round(
+                influence_score / len(sensors) + support_ratio * 0.4 - normalized_error * 0.7,
+                4,
+            )
+            candidates.append(
+                {
+                    "mapPoint": {"x": x, "y": y},
+                    "score": score,
+                    "error": round(normalized_error, 4),
+                    "supportCount": support_count,
+                }
+            )
+
+    candidates.sort(key=lambda item: item["score"], reverse=True)
+
+    candidate_regions: List[Dict] = []
+    for candidate in candidates:
+        if len(candidate_regions) >= int(config["topK"]):
+            break
+        too_close = any(
+            math.hypot(region["center"]["x"] - candidate["mapPoint"]["x"], region["center"]["y"] - candidate["mapPoint"]["y"])
+            < float(config["mergeDistance"])
+            for region in candidate_regions
+        )
+        if too_close:
+            continue
+
+        center = candidate["mapPoint"]
+        radius = float(config["candidateRadius"])
+        candidate_regions.append(
+            {
+                "candidateId": f"cand_{len(candidate_regions) + 1}",
+                "rank": len(candidate_regions) + 1,
+                "center": center,
+                "geoCenter": to_geo_point(center["x"], center["y"]),
+                "score": candidate["score"],
+                "error": candidate["error"],
+                "supportCount": candidate["supportCount"],
+                "radius": radius,
+                "bounds": {
+                    "minX": center["x"] - radius,
+                    "maxX": center["x"] + radius,
+                    "minY": center["y"] - radius,
+                    "maxY": center["y"] + radius,
+                },
+                "label": f"候选区域 {len(candidate_regions) + 1}",
+            }
+        )
+
+    return {
+        "candidateRegions": candidate_regions,
+        "meta": {
+            "gasId": dataset.get("gas", {}).get("gasId") or dataset.get("gas", {}).get("id") or "",
+            "activeSensorCount": len(sensors),
+            "currentFrameIndex": int(dataset.get("currentFrameIndex") or 0),
+            "frameTimeSec": dataset.get("frameTimeSec") or 0,
+            "gridStep": config["gridStep"],
+            "topK": config["topK"],
+            "candidateRadius": config["candidateRadius"],
+            "minObservationThreshold": config["minObservationThreshold"],
+        },
+    }
+
+
+def build_active_sensors(sensors: List[Dict], current_frame_index: int, min_observation_threshold: float) -> List[Dict]:
+    """Build a list of active sensors with observed signals above threshold.
+
+    Combines sampled peak and current concentration into a weighted
+    observed signal, filtering by minimum threshold.
+
+    Args:
+        sensors: Raw sensor list with sampled series and peak data.
+        current_frame_index: Current frame for concentration lookup.
+        min_observation_threshold: Minimum signal threshold for activation.
+
+    Returns:
+        List of active sensor dicts with id, position, and observed signal.
+    """
+    active_sensors = []
+    for sensor in sensors:
+        sampled_series = sensor.get("sampledSeries") or []
+        current_concentration = pick_sampled_concentration(sampled_series, current_frame_index)
+        peak = float(sensor.get("sampledPeak") or current_concentration or 0)
+        observed_signal = peak * 0.65 + current_concentration * 0.35
+        active_sensors.append(
+            {
+                "id": sensor.get("id", ""),
+                "priority": int(sensor.get("priority") or 0),
+                "x": float(sensor.get("x") if sensor.get("x") is not None else sensor.get("mapPoint", {}).get("x", 0)),
+                "y": float(sensor.get("y") if sensor.get("y") is not None else sensor.get("mapPoint", {}).get("y", 0)),
+                "currentConcentration": round(current_concentration, 2),
+                "observedSignal": round(observed_signal, 2),
+            }
+        )
+
+    return [sensor for sensor in active_sensors if sensor["observedSignal"] >= min_observation_threshold]
+
+
+def pick_sampled_concentration(sampled_series: List[Dict], current_frame_index: int) -> float:
+    """Get the concentration at a given frame index from a sampled series.
+
+    Args:
+        sampled_series: List of frame concentration samples.
+        current_frame_index: Target frame index.
+
+    Returns:
+        Concentration value, or last available if index out of range.
+    """
+    if not sampled_series:
+        return 0.0
+    if 0 <= current_frame_index < len(sampled_series):
+        return float(sampled_series[current_frame_index].get("concentration") or 0)
+    return float(sampled_series[-1].get("concentration") or 0)
+
+
+def to_geo_point(x: float, y: float) -> Dict:
+    """Convert map pixel coordinates to geographic coordinates.
+
+    Uses the configured origin longitude/latitude and map scale to
+    compute approximate GPS coordinates with elevation.
+
+    Args:
+        x: Map pixel X-coordinate.
+        y: Map pixel Y-coordinate.
+
+    Returns:
+        Dictionary with longitude, latitude, and altitude.
+    """
+    meters_x = x * MAP_METERS_PER_UNIT
+    meters_y = y * MAP_METERS_PER_UNIT
+    latitude = ORIGIN_LATITUDE - meters_y / 111320
+    longitude = ORIGIN_LONGITUDE + meters_x / (111320 * math.cos(ORIGIN_LATITUDE * math.pi / 180))
+    normalized_y = min(max(y, 0), 650)
+    altitude = (
+        BASE_ALTITUDE
+        + (650 - normalized_y) * 0.02
+        + math.sin(x / 90) * 1.8
+        + math.cos(y / 70) * 1.2
+    )
+    return {
+        "longitude": round(longitude, 6),
+        "latitude": round(latitude, 6),
+        "altitude": round(altitude, 2),
+    }
