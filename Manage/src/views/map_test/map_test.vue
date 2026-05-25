@@ -300,7 +300,7 @@
           <div class="sensor-hover-grid">
             <span>当前时间 {{ hoveredSensorCard.timeLabel }}</span>
             <span>采样峰值 {{ hoveredSensorCard.peakLabel }}</span>
-            <span>优先级 P{{ hoveredSensorCard.priority }}</span>
+            <span>优先级 P{{ hoveredSensorCard.priority }}（{{ hoveredSensorCard.priorityLabel }}）</span>
             <span>{{ hoveredSensorCard.coordLabel }}</span>
           </div>
         </div>
@@ -315,11 +315,11 @@
           <button class="tool-btn" :class="{ active: showEntrances }" @click="toggleEntrances">
             <i class="fas fa-door-open"></i> 出入口
           </button>
-          <button class="tool-btn" :class="{ active: isRLMode }" @click="rlOptimizeLayout">
-            <i class="fas fa-microchip"></i> RL布局
+          <button class="tool-btn" :class="{ active: measureMode }" @click="setTool('measure')">
+            <i class="fas fa-ruler"></i> 测距
           </button>
-          <button class="tool-btn" @click="updateWeatherAndOptimize">
-            <i class="fas fa-wind"></i> 气象优化
+          <button class="tool-btn" @click="clearAllSensor">
+            <i class="fas fa-trash"></i> 清空传感器
           </button>
           <button class="tool-btn" :class="{ active: showCars }" @click="toggleCars" title="显示/隐藏巡检小车">
             <i class="fas fa-truck"></i> 小车
@@ -510,12 +510,15 @@
                 </button>
               </div>
               <div class="control-subnote" style="margin-top:8px;">
-                自动模式跟随扩散场采样；手动模式使用独立时间序列，并同步影响图表、告警显示和 PINN 输入。
+                自动采样：系统定时生成仿真采样数据，跟随当前扩散场浓度变化。手动采样：用户点击按钮后生成一次采样数据，使用独立时间序列，并同步影响图表、告警显示和 PINN 输入。
               </div>
             </div>
           </template>
           <div v-if="selectedSensor" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
-            <button class="sensor-btn danger" style="width:100%;" @click="deleteCurrSensor">
+                        <button class="sensor-btn primary" style="width:100%;margin-bottom:8px;" @click="openSensorEdit">
+              <i class="fas fa-edit"></i> 编辑参数
+            </button>
+<button class="sensor-btn danger" style="width:100%;" @click="deleteCurrSensor">
               <i class="fas fa-minus-circle"></i> 删除此传感器
             </button>
           </div>
@@ -828,6 +831,28 @@
         </div>
 
         <div class="panel-section">
+          <div class="panel-title"><i class="fas fa-cloud-sun"></i> 气象环境 <span :class="weatherSource === 'real' ? 'tag tag-green' : 'tag tag-gray'" style="font-size:10px;margin-left:6px;">{{ weatherSource === 'real' ? '实时天气' : '模拟天气' }}</span></div>
+          <div class="sensor-stat-grid" style="grid-template-columns:1fr 1fr 1fr;">
+            <div class="stat-mini">
+              <div class="val" style="font-size:14px;">{{ weatherState.windSpeed.toFixed(1) }} <span style="font-size:10px;opacity:0.7">m/s</span></div>
+              <div class="lab" v-if="weatherSource === 'real' && weatherState.windSpeedKmh">风速（{{ weatherState.windSpeedKmh.toFixed(1) }} km/h）</div>
+              <div class="lab" v-else>风速（模型值）</div>
+            </div>
+            <div class="stat-mini">
+              <div class="val" style="font-size:14px;">{{ weatherState.windDir }}°</div>
+              <div class="lab">风向</div>
+            </div>
+            <div class="stat-mini">
+              <div class="val" style="font-size:14px;">{{ weatherState.temp.toFixed(1) }}°C</div>
+              <div class="lab">温度</div>
+            </div>
+          </div>
+          <div v-if="weatherSource === 'real' && weatherState.obsTime" style="margin-top:6px;font-size:11px;color:var(--fg-muted);text-align:center;">
+            观测时间：{{ weatherState.obsTime }}
+          </div>
+        </div>
+
+        <div class="panel-section">
           <div class="panel-title"><i class="fas fa-microchip"></i> 传感器布局统计</div>
           <div class="sensor-stat-grid">
             <div class="stat-mini">
@@ -851,7 +876,7 @@
           <div class="sensor-btn-group" style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
             <button class="sensor-btn primary" :class="{ active: sensorPlacementState.picking }" @click="addManualSensor">
               <i :class="sensorPlacementState.picking ? 'fas fa-ban' : 'fas fa-plus'"></i>
-              {{ sensorPlacementState.picking ? '取消选点' : '手动添加' }}
+              {{ sensorPlacementState.picking ? '取消选点' : (manualSensorConfigVisible ? '重新选点' : '手动添加') }}
             </button>
             <button class="sensor-btn primary" :class="{ active: manualSensorPanelVisible }" @click="toggleManualSensorPanel">
               <i class="fas fa-pen-to-square"></i> 手动录入
@@ -859,6 +884,53 @@
             <button class="sensor-btn danger" @click="clearAllSensor">
               <i class="fas fa-trash"></i> 清空全部
             </button>
+          </div>
+          <div v-if="manualSensorConfigVisible" class="candidate-detail-card" style="margin-top:10px;">
+            <div class="candidate-detail-head">
+              <span>手动添加传感器参数</span>
+              <span>{{ manualSensorPlacementPointLabel }}</span>
+            </div>
+            <div class="control-grid" style="margin-top:10px;">
+              <label class="control-field">
+                <span>安装高度 (m)</span>
+                <input v-model.number="manualSensorDraft.installationHeight" type="number" min="0.3" max="10" step="0.1">
+              </label>
+              <label class="control-field">
+                <span>有效监测范围 (m)</span>
+                <input v-model.number="manualSensorDraft.effectiveRange" type="number" min="5" max="100" step="1">
+              </label>
+              <label class="control-field" style="grid-column:1 / -1;">
+                <span>检测范围</span>
+                <input v-model.trim="manualSensorDraft.detectionRange" type="text" placeholder="CO / 可燃气体 / H2S / O2">
+              </label>
+              <label class="control-field" style="grid-column:1 / -1;">
+                <span>布点说明 / 备注（可选）</span>
+                <input v-model.trim="manualSensorDraft.installRemark" type="text" placeholder="如：靠近阀组、下风向重点监测">
+              </label>
+            </div>
+            <div class="control-note" :class="{ invalid: !manualSensorDraftValidation.valid }" style="margin-top:10px;">
+              {{ manualSensorDraftValidation.message }}
+            </div>
+            <div class="control-subnote" style="margin-top:8px;">
+              默认值：安装高度 {{ MANUAL_SENSOR_DEFAULTS.installationHeight }} m，有效监测范围 {{ MANUAL_SENSOR_DEFAULTS.effectiveRange }} m，检测范围 {{ MANUAL_SENSOR_DEFAULTS.detectionRange }}
+            </div>
+            <div class="control-subnote" style="margin-top:4px;">
+              当前点位：{{ manualSensorPlacementLocationText }}
+            </div>
+            <div class="inline-actions" style="margin-top:10px;">
+              <button class="sensor-btn primary" @click="startManualSensorPicking">
+                <i class="fas fa-location-crosshairs"></i> {{ sensorPlacementState.picking ? '正在地图选点' : (sensorPlacementState.pendingPoint ? '重新地图选点' : '开始地图选点') }}
+              </button>
+              <button class="sensor-btn primary" @click="resetManualSensorDraft(true)">
+                <i class="fas fa-rotate-left"></i> 恢复默认值
+              </button>
+              <button class="sensor-btn primary" @click="confirmManualSensorPlacement">
+                <i class="fas fa-circle-check"></i> 确认添加
+              </button>
+              <button class="sensor-btn danger" @click="cancelManualSensorPlacement">
+                <i class="fas fa-xmark"></i> 取消
+              </button>
+            </div>
           </div>
           <div v-if="manualSensorPanelVisible" class="candidate-detail-card" style="margin-top:10px;">
             <div class="candidate-detail-head">
@@ -918,6 +990,69 @@
           </div>
         </div>
 
+        <div class="panel-section">
+          <div class="panel-title" @click="gasPanelVisible = !gasPanelVisible" style="cursor:pointer;">
+            <i class="fas fa-flask"></i> 气体类型管理
+            <span style="margin-left:auto;font-size:11px;color:var(--fg-muted);">{{ gases.length }} 种</span>
+            <i class="fas" :class="gasPanelVisible ? 'fa-chevron-up' : 'fa-chevron-down'" style="margin-left:6px;"></i>
+          </div>
+          <div v-if="gasPanelVisible">
+            <div v-if="gases.length === 0" class="control-note" style="margin-top:6px;">暂无气体类型数据</div>
+            <div v-for="g in gases" :key="g.id" class="gas-item" style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+              <span style="font-weight:bold;min-width:40px;font-size:12px;color:#00e5a0;">{{ g.id }}</span>
+              <span style="flex:1;font-size:11px;">{{ g.name }}</span>
+              <span style="font-size:10px;color:var(--fg-muted);">{{ g.detectionRange }}</span>
+              <button class="tool-btn" style="padding:2px 6px;font-size:10px;" @click="editGas(g)"><i class="fas fa-pen"></i></button>
+              <button class="tool-btn" style="padding:2px 6px;font-size:10px;color:#ef4444;" @click="removeGas(g.id)"><i class="fas fa-trash"></i></button>
+            </div>
+            <div class="inline-actions" style="margin-top:8px;">
+              <button class="sensor-btn primary" @click="resetGasDraft()" style="font-size:11px;padding:4px 10px;">
+                <i class="fas fa-plus"></i> 新增气体
+              </button>
+              <button class="sensor-btn primary" @click="saveGasDraft()" style="font-size:11px;padding:4px 10px;" :disabled="!gasEditDraft.id">
+                <i class="fas fa-save"></i> 保存
+              </button>
+            </div>
+            <div class="control-grid" style="margin-top:6px;grid-template-columns:1fr 1fr;">
+              <label class="control-field" style="grid-column:1 / -1;">
+                <span>气体编号 / 名称</span>
+                <div style="display:flex;gap:4px;">
+                  <input v-model.trim="gasEditDraft.id" type="text" placeholder="编号 (如 CO)" style="width:80px;">
+                  <input v-model.trim="gasEditDraft.name" type="text" placeholder="名称 (如一氧化碳)" style="flex:1;">
+                </div>
+              </label>
+              <label class="control-field" style="grid-column:1 / -1;">
+                <span>检测范围</span>
+                <input v-model.trim="gasEditDraft.detectionRange" type="text" placeholder="如 0-1000 ppm">
+              </label>
+              <label class="control-field">
+                <span>安装高度 (m)</span>
+                <input v-model.number="gasEditDraft.installationHeight" type="number" min="0.3" max="10" step="0.1">
+              </label>
+              <label class="control-field">
+                <span>有效范围 (m)</span>
+                <input v-model.number="gasEditDraft.effectiveRange" type="number" min="5" max="100" step="1">
+              </label>
+              <label class="control-field">
+                <span>优先级</span>
+                <select v-model.number="gasEditDraft.priority">
+                  <option :value="1">1 - 高危</option>
+                  <option :value="2">2 - 常规</option>
+                  <option :value="3">3 - 辅助</option>
+                </select>
+              </label>
+              <label class="control-field">
+                <span>风险值</span>
+                <input v-model.number="gasEditDraft.risk" type="number" min="0" max="1" step="0.05">
+              </label>
+              <label class="control-field" style="grid-column:1 / -1;">
+                <span>备注</span>
+                <input v-model.trim="gasEditDraft.installRemark" type="text" placeholder="布点说明">
+              </label>
+            </div>
+          </div>
+        </div>
+
         <div class="panel-section" style="margin-top:auto;">
           <div class="panel-title"><i class="fas fa-bell"></i> 实时告警</div>
           <div class="alert-list">
@@ -933,6 +1068,49 @@
       </aside>
     </div>
 
+    <!-- 传感器参数编辑浮层 -->
+    <div v-if="sensorEditVisible" class="sensor-edit-overlay" @click.self="sensorEditVisible = false">
+      <div class="sensor-edit-panel">
+        <div class="sensor-edit-header">
+          <span>编辑传感器参数</span>
+          <button class="close-btn" @click="sensorEditVisible = false"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="sensor-edit-body">
+          <label class="control-field">
+            <span>安装高度 (m)</span>
+            <input v-model.number="sensorEditDraft.installationHeight" type="number" min="0.3" max="10" step="0.1">
+          </label>
+          <label class="control-field">
+            <span>有效监测范围 (m)</span>
+            <input v-model.number="sensorEditDraft.effectiveRange" type="number" min="5" max="100" step="1">
+          </label>
+          <label class="control-field">
+            <span>检测范围</span>
+            <input v-model.trim="sensorEditDraft.detectionRange" type="text" placeholder="如 0-1000 ppm">
+          </label>
+          <label class="control-field">
+            <span>优先级</span>
+            <select v-model.number="sensorEditDraft.priority">
+              <option :value="1">1 - 高危</option>
+              <option :value="2">2 - 常规</option>
+              <option :value="3">3 - 辅助</option>
+            </select>
+          </label>
+          <label class="control-field">
+            <span>风险值</span>
+            <input v-model.number="sensorEditDraft.risk" type="number" min="0" max="1" step="0.05">
+          </label>
+          <label class="control-field" style="grid-column:1 / -1;">
+            <span>布点说明</span>
+            <input v-model.trim="sensorEditDraft.installRemark" type="text" placeholder="安装位置备注">
+          </label>
+          <div class="inline-actions" style="margin-top:16px;justify-content:flex-end;">
+            <button class="sensor-btn" style="background:var(--bg-elevated);color:var(--fg);border:1px solid var(--border);" @click="sensorEditVisible = false">取消</button>
+            <button class="sensor-btn primary" @click="saveSensorEdit"><i class="fas fa-save"></i> 保存修改</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="toast" :class="[toastVisible ? 'show' : '', toastType]">
       <i :class="toastIcon"></i>
       <span>{{ toastText }}</span>
@@ -966,7 +1144,6 @@ import { clamp, formatGeoCoord, geoToWorld, worldToGeo } from '@/data/coordinate
 import {
   alerts,
   buildingEntrances,
-  demoSensorSeeds,
   facilities,
   facilityById,
   getFacilityAnchorPoint,
@@ -1261,8 +1438,78 @@ window.__toggleCarWarning = async (id) => {
 }
 
 const sensors = ref([])
+const gases = ref([])
 const riskGrid = ref([])
-const weatherState = ref({windSpeed: 2, windDir: 135, temp: 28, rain: 0})
+const weatherState = ref({windSpeed: 2, windDir: 135, temp: 28, rain: 0, humidity: 60, pressure: 1013, windSpeedKmh: 0, obsTime: ''})
+const weatherSource = ref('simulated') // 'real' | 'simulated'
+const lastWeatherFetch = ref(0)
+/** 当前无真实泄漏/扩散事件时，浓度数据由高斯烟羽模型仿真生成 */
+const isSimulatedConcentration = computed(() =>
+  !diffusionFrames.value.length || !currentLeakSourcePoint.value
+)
+
+/**
+ * 获取实时天气数据（和风天气 API v7）
+ * 园区坐标：118.780E, 32.040N
+ * 若 API Key 未配置或请求失败，自动回退到模拟天气
+ *
+ * ⚠️ 安全说明：
+ * 当前方案在前端直连和风天气 API，适合开发演示。
+ * 正式部署时务必通过后端代理转发请求（将 VITE_QWEATHER_KEY 移至后端配置），
+ * 避免 API Key 在浏览器端暴露。
+ */
+async function fetchRealtimeWeather() {
+  const apiKey = import.meta.env.VITE_QWEATHER_KEY
+  if (!apiKey) {
+    if (weatherSource.value !== 'simulated') {
+      weatherSource.value = 'simulated'
+      showToast('未配置 QWeather API Key，使用模拟天气数据', 'warn')
+    }
+    return
+  }
+  try {
+    const resp = await fetch(
+      `https://devapi.qweather.com/v7/weather/now?location=118.78,32.04&key=${apiKey}`
+    )
+    const data = await resp.json()
+    if (data.code === '200') {
+      const now = data.now
+      // ── 风向 ──
+      // 和风天气 wind360 指示"风来的方向"，转换为模型使用的"风吹向"（+180°）
+      const windDirFrom = parseInt(now.wind360) || 135
+      const windDirTo = (windDirFrom + 180) % 360
+      // ── 风速单位转换 ──
+      // QWeather now.windSpeed 单位是 km/h，模型计算需使用 m/s（÷3.6）
+      const windSpeedKmh = parseFloat(now.windSpeed) || 0
+      const windSpeedMs = windSpeedKmh / 3.6
+      weatherState.value = {
+        windSpeed: Math.round(windSpeedMs * 10) / 10,    // m/s（参与扩散/监测范围/风险计算）
+        windSpeedKmh: Math.round(windSpeedKmh * 10) / 10, // km/h（仅 UI 展示）
+        windDir: windDirTo,
+        temp: parseFloat(now.temp) || 28,
+        rain: parseFloat(now.precip) || 0,
+        humidity: parseFloat(now.humidity) || 60,
+        pressure: parseFloat(now.pressure) || 1013,
+        obsTime: now.obsTime || ''
+      }
+      weatherSource.value = 'real'
+      lastWeatherFetch.value = Date.now()
+    } else {
+      throw new Error(`API error: ${data.code}`)
+    }
+  } catch (e) {
+    console.warn('QWeather fetch failed, fallback to simulated:', e.message)
+    weatherSource.value = 'simulated'
+  }
+}
+
+/**
+ * 定时刷新真实天气（每 30 分钟）
+ */
+function startWeatherAutoRefresh() {
+  fetchRealtimeWeather()
+  setInterval(() => fetchRealtimeWeather(), 30 * 60 * 1000)
+}
 const layoutResult = ref({ totalCost: 0, coverageRate: 0, riskCoverRate: 0, sensorCount: 0 })
 const selectedSensor = ref(null)
 const riskStat = ref({ high: 0, mid: 0, low: 0 })
@@ -1280,9 +1527,24 @@ const leakSourceState = reactive({
   manualLongitude: '',
   manualLatitude: '',
 })
+const MANUAL_SENSOR_DEFAULTS = Object.freeze({
+  installationHeight: 1.5,
+  effectiveRange: 30,
+  detectionRange: 'CO / 可燃气体 / H2S / O2',
+  installRemark: '',
+})
 const sensorPlacementState = reactive({
   picking: false,
+  pendingPoint: null,
 })
+function createManualSensorDraft() {
+  return {
+    installationHeight: MANUAL_SENSOR_DEFAULTS.installationHeight,
+    effectiveRange: MANUAL_SENSOR_DEFAULTS.effectiveRange,
+    detectionRange: MANUAL_SENSOR_DEFAULTS.detectionRange,
+    installRemark: MANUAL_SENSOR_DEFAULTS.installRemark,
+  }
+}
 const diffusionSourceOptions = computed(() => getPhase1LeakSources(facilities, diffusionForm.gasId))
 const diffusionFrames = ref([])
 const diffusionMeta = ref({
@@ -1387,11 +1649,56 @@ const sensorEditorState = reactive({
   fillAllConcentration: 0,
   boundSensorId: '',
 })
+const manualSensorConfigVisible = ref(false)
+const gasPanelVisible = ref(false)
+const gasEditDraft = reactive({ id: '', name: '', detectionRange: '', installationHeight: 1.5, effectiveRange: 30, installRemark: '', priority: 2, risk: 0.3 })
+const manualSensorDraft = reactive(createManualSensorDraft())
 const manualSensorPanelVisible = ref(false)
 const manualSensorTargetId = ref('')
 const manualSensorTarget = computed(() => (
   sensors.value.find(sensor => sensor.id === manualSensorTargetId.value) || selectedSensor.value || sensors.value[0] || null
 ))
+/** 传感器参数编辑状态 */
+const sensorEditVisible = ref(false)
+const sensorEditDraft = reactive({
+  id: '',
+  installationHeight: 1.5,
+  effectiveRange: 30,
+  detectionRange: '',
+  installRemark: '',
+  priority: 2,
+  risk: 0.3,
+})
+const manualSensorPlacementGeo = computed(() => (
+  sensorPlacementState.pendingPoint ? formatGeoCoord(sensorPlacementState.pendingPoint.x, sensorPlacementState.pendingPoint.y) : null
+))
+const manualSensorPlacementPointLabel = computed(() => (
+  sensorPlacementState.pendingPoint ? '已选点' : '待选点'
+))
+const manualSensorPlacementLocationText = computed(() => {
+  if (!sensorPlacementState.pendingPoint || !manualSensorPlacementGeo.value) {
+    return '请先点击地图选择传感器安装位置'
+  }
+  const point = sensorPlacementState.pendingPoint
+  const geo = manualSensorPlacementGeo.value
+  return `地图坐标 (${point.x.toFixed(1)}, ${point.y.toFixed(1)}) / 经纬度 ${geo.longitude} / ${geo.latitude}`
+})
+const manualSensorDraftValidation = computed(() => {
+  const hasHeight = manualSensorDraft.installationHeight !== '' && manualSensorDraft.installationHeight !== null && manualSensorDraft.installationHeight !== undefined
+  const hasRange = manualSensorDraft.effectiveRange !== '' && manualSensorDraft.effectiveRange !== null && manualSensorDraft.effectiveRange !== undefined
+  const height = Number(manualSensorDraft.installationHeight)
+  const range = Number(manualSensorDraft.effectiveRange)
+  if (hasHeight && (!Number.isFinite(height) || height < 0.3 || height > 10)) {
+    return { valid: false, message: '安装高度需在 0.3 ~ 10 m 之间。' }
+  }
+  if (hasRange && (!Number.isFinite(range) || range < 5 || range > 100)) {
+    return { valid: false, message: '有效监测范围需在 5 ~ 100 m 之间。' }
+  }
+  if (!sensorPlacementState.pendingPoint) {
+    return { valid: false, message: '请先点击地图选择传感器安装位置，再确认添加。' }
+  }
+  return { valid: true, message: '参数校验通过；留空项会自动使用默认值。' }
+})
 const hoveredSensorCard = computed(() => {
   if (!hoveredSensor.value) return null
   const sensor = hoveredSensor.value
@@ -1400,16 +1707,18 @@ const hoveredSensorCard = computed(() => {
   const concentration = getSensorCurrentConcentration(sensor)
   const level = getSensorAlarmLevel(concentration, gas)
   const geo = formatGeoCoord(sensor.x, sensor.y)
+  const pLabel = getPriorityLabel(sensor.priority)
   return {
     id: sensor.id,
     priority: sensor.priority,
+    priorityLabel: pLabel,
     typeName: type?.name || '传感器',
     currentLabel: `${concentration.toFixed(2)} ppm`,
     peakLabel: `${(sensor.sampledPeak || 0).toFixed(2)} ppm`,
     timeLabel: `${(currentDiffusionFrame.value?.timeSec || 0).toFixed(0)} s`,
     coordLabel: `${geo.longitude} / ${geo.latitude}`,
     levelLabel: level === 'danger' ? '危险' : level === 'warning' ? '预警' : '正常',
-    levelText: level === 'danger' ? '超危险阈值' : level === 'warning' ? '超预警阈值' : '采样正常',
+    levelText: level === 'danger' ? '超危险阈值' : level === 'warning' ? '超预警阈值' : '正常',
     levelClass: level,
   }
 })
@@ -1506,10 +1815,497 @@ const evacuationSummary = computed(() => {
   }
 })
 
-// ✅ 新增：RL布局开关 + 原始传感器备份
-const isRLMode = ref(false)
-let originalSensors = []
 let lastAnimTime = 0
+
+/**
+ * ====== 传感器数据库持久化 API ======
+ */
+
+/** 从后端加载所有已保存的传感器 */
+async function fetchSensorsFromDB() {
+  try {
+    const resp = await fetch('http://localhost:8081/api/sensor/list')
+    const data = await resp.json()
+    if (data.code === 200 && Array.isArray(data.data)) {
+      sensors.value = buildActiveSensorSeries(data.data, diffusionFrames.value)
+    }
+  } catch (err) {
+    console.warn('从数据库加载传感器失败:', err.message)
+  }
+}
+
+/** 保存传感器到后端 */
+async function saveSensorToDB(sensor) {
+  try {
+    const resp = await fetch('http://localhost:8081/api/sensor/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: sensor.id,
+        x: sensor.x,
+        y: sensor.y,
+        installationHeight: sensor.installationHeight,
+        effectiveRange: sensor.effectiveRange,
+        detectionRange: sensor.detectionRange,
+        installRemark: sensor.installRemark,
+        priority: sensor.priority,
+        risk: sensor.risk,
+        type: sensor.type || 'gas',
+        mode: sensor.mode || 'auto',
+        lastSampleTime: sensor.lastSampleTime,
+      })
+    })
+    const result = await resp.json()
+    if (result.code !== 200) {
+      console.warn('保存传感器到数据库失败:', result.message)
+    }
+  } catch (err) {
+    console.warn('保存传感器到数据库失败:', err.message)
+  }
+}
+
+/** 更新传感器参数到后端 */
+async function updateSensorToDB(sensor) {
+  try {
+    const resp = await fetch('http://localhost:8081/api/sensor/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: sensor.id,
+        x: sensor.x,
+        y: sensor.y,
+        installationHeight: sensor.installationHeight,
+        effectiveRange: sensor.effectiveRange,
+        detectionRange: sensor.detectionRange,
+        installRemark: sensor.installRemark,
+        priority: sensor.priority,
+        risk: sensor.risk,
+        type: sensor.type || 'gas',
+        mode: sensor.mode || 'auto',
+        lastSampleTime: sensor.lastSampleTime,
+      })
+    })
+    const result = await resp.json()
+    if (result.code !== 200) {
+      console.warn('更新传感器到数据库失败:', result.message)
+    }
+  } catch (err) {
+    console.warn('更新传感器到数据库失败:', err.message)
+  }
+}
+
+/** 从后端删除传感器 */
+async function deleteSensorFromDB(id) {
+  try {
+    const resp = await fetch('http://localhost:8081/api/sensor/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    })
+    const result = await resp.json()
+    if (result.code !== 200) {
+      console.warn('从数据库删除传感器失败:', result.message)
+    }
+  } catch (err) {
+    console.warn('从数据库删除传感器失败:', err.message)
+  }
+}
+
+/** 批量从后端删除传感器 */
+async function deleteAllSensorsFromDB() {
+  for (const s of sensors.value) {
+    await deleteSensorFromDB(s.id)
+  }
+}
+
+/** ---------- 气体类型 CRUD（gas 表） ---------- */
+
+/** 从后端加载气体类型列表 */
+async function fetchGasList() {
+  try {
+    const resp = await fetch('http://localhost:8081/api/gas/list')
+    const data = await resp.json()
+    if (data.code === 200 && Array.isArray(data.data)) {
+      gases.value = data.data
+    }
+  } catch (err) {
+    console.warn('从数据库加载气体类型失败:', err.message)
+  }
+}
+
+/** 保存气体类型到后端 */
+async function saveGasToDB(gas) {
+  try {
+    const resp = await fetch('http://localhost:8081/api/gas/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(gas)
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      await fetchGasList()
+    } else {
+      console.warn('保存气体类型到数据库失败:', result.message)
+    }
+  } catch (err) {
+    console.warn('保存气体类型到数据库失败:', err.message)
+  }
+}
+
+/** 更新气体类型到后端 */
+async function updateGasToDB(gas) {
+  try {
+    const resp = await fetch('http://localhost:8081/api/gas/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(gas)
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      await fetchGasList()
+    } else {
+      console.warn('更新气体类型到数据库失败:', result.message)
+    }
+  } catch (err) {
+    console.warn('更新气体类型到数据库失败:', err.message)
+  }
+}
+
+/** 从后端删除气体类型 */
+async function deleteGasFromDB(id) {
+  try {
+    const resp = await fetch('http://localhost:8081/api/gas/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    })
+    const result = await resp.json()
+    if (result.code === 200) {
+      await fetchGasList()
+    }
+  } catch (err) {
+    console.warn('从数据库删除气体类型失败:', err.message)
+  }
+}
+/**
+ * 气体管理面板：编辑气体
+ */
+function editGas(g) {
+  gasEditDraft.id = g.id
+  gasEditDraft.name = g.name
+  gasEditDraft.detectionRange = g.detectionRange
+  gasEditDraft.installationHeight = g.installationHeight
+  gasEditDraft.effectiveRange = g.effectiveRange
+  gasEditDraft.installRemark = g.installRemark || ''
+  gasEditDraft.priority = g.priority
+  gasEditDraft.risk = g.risk
+  gasPanelVisible.value = true
+}
+
+/**
+ * 气体管理面板：删除气体
+ */
+async function removeGas(id) {
+  if (!confirm('确定删除气体类型 ' + id + ' 吗？')) return
+  await deleteGasFromDB(id)
+}
+
+/**
+ * 气体管理面板：重置为新增模式
+ */
+function resetGasDraft() {
+  gasEditDraft.id = ''
+  gasEditDraft.name = ''
+  gasEditDraft.detectionRange = ''
+  gasEditDraft.installationHeight = 1.5
+  gasEditDraft.effectiveRange = 30
+  gasEditDraft.installRemark = ''
+  gasEditDraft.priority = 2
+  gasEditDraft.risk = 0.3
+  gasPanelVisible.value = true
+}
+
+
+/** 打开传感器参数编辑面板 */
+function openSensorEdit() {
+  const s = selectedSensor.value
+  if (!s) return
+  sensorEditDraft.id = s.id
+  sensorEditDraft.installationHeight = s.installationHeight ?? 1.5
+  sensorEditDraft.effectiveRange = s.effectiveRange ?? 30
+  sensorEditDraft.detectionRange = s.detectionRange ?? ''
+  sensorEditDraft.installRemark = s.installRemark ?? ''
+  sensorEditDraft.priority = s.priority ?? 2
+  sensorEditDraft.risk = s.risk ?? 0.3
+  sensorEditVisible.value = true
+}
+
+/** 保存传感器参数修改 */
+async function saveSensorEdit() {
+  const s = selectedSensor.value
+  if (!s || !sensorEditDraft.id) return
+  // 更新本地对象
+  s.installationHeight = sensorEditDraft.installationHeight
+  s.effectiveRange = sensorEditDraft.effectiveRange
+  s.detectionRange = sensorEditDraft.detectionRange
+  s.installRemark = sensorEditDraft.installRemark
+  s.priority = sensorEditDraft.priority
+  s.risk = sensorEditDraft.risk
+  // 更新到数据库
+  await updateSensorToDB({
+    id: s.id,
+    x: s.x,
+    y: s.y,
+    installationHeight: s.installationHeight,
+    effectiveRange: s.effectiveRange,
+    detectionRange: s.detectionRange,
+    installRemark: s.installRemark,
+    priority: s.priority,
+    risk: s.risk,
+    type: s.type || 'gas',
+    mode: s.mode || 'auto',
+    lastSampleTime: s.lastSampleTime,
+  })
+  sensorEditVisible.value = false
+  showToast('传感器参数已保存', 'success')
+}
+/**
+ * 气体管理面板：保存气体
+ */
+async function saveGasDraft() {
+  if (!gasEditDraft.id || !gasEditDraft.name) {
+    showToast('请填写气体编号和名称', 'warn')
+    return
+  }
+  const existing = gases.value.find(g => g.id === gasEditDraft.id)
+  const payload = {
+    id: gasEditDraft.id,
+    name: gasEditDraft.name,
+    detectionRange: gasEditDraft.detectionRange,
+    installationHeight: gasEditDraft.installationHeight,
+    effectiveRange: gasEditDraft.effectiveRange,
+    installRemark: gasEditDraft.installRemark,
+    priority: gasEditDraft.priority,
+    risk: gasEditDraft.risk,
+    type: 'gas',
+    mode: 'auto',
+  }
+  if (existing) {
+    await updateGasToDB(payload)
+    showToast('气体类型已更新', 'success')
+  } else {
+    await saveGasToDB(payload)
+    showToast('气体类型已添加', 'success')
+  }
+}
+
+
+/**
+ * 传感器布局配置常量
+ * 参考 GB/T 50493《石油化工可燃气体和有毒气体检测报警设计标准》思想进行仿真布点
+ * 注意：此处不是严格工程验收级布点，而是将泄漏源距离、设备状态、风向和最小间距作为仿真布点规则
+ */
+const SENSOR_LAYOUT_CONFIG = {
+  maxSensors: 25,
+  minSensorDistance: 120,
+  highRiskThreshold: 0.55,
+  sourceInfluenceRadius: 180,
+  downwindBonus: 0.35,
+  alertBonus: 0.35,
+  maintenanceBonus: 0.15,
+  // 高风险区（储罐区/塔器区）允许的较密间距
+  highDensityMinDistance: 70
+}
+
+/**
+ * 根据区域动态计算最小传感器间距
+ * 储罐区/塔器区等高危区域允许更高密度，普通区域强制较大间距
+ */
+function dynamicMinDistance(cell) {
+  const cfg = SENSOR_LAYOUT_CONFIG
+  // 判断是否在高风险密集区（通过检查附近高 hazardLevel 设施）
+  let nearHighRisk = false
+  for (const f of facilities) {
+    const hazard = f.hazardLevel || 0.3
+    if (hazard < 0.7) continue
+    let fx = f.x, fy = f.y
+    if (f.type !== 'tank' && f.type !== 'tower') { fx += (f.w || 0) / 2; fy += (f.h || 0) / 2 }
+    const d = Math.hypot(cell.x - fx, cell.y - fy)
+    if (d < cfg.sourceInfluenceRadius) {
+      nearHighRisk = true
+      break
+    }
+  }
+  return nearHighRisk ? cfg.highDensityMinDistance : cfg.minSensorDistance
+}
+
+/**
+ * 传感器编号生成规则（符合工程命名规范）
+ * 储罐区: TK-01, TK-02 ...
+ * 塔器区: TW-01, TW-02 ...
+ * 泵房/压缩机: PF-01, PF-02 ...
+ * 生产区: SC-01, SC-02 ...
+ * 办公区: BG-01, BG-02 ...
+ * 仓储区: WH-01, WH-02 ...
+ * 公用工程: GE-01, GE-02 ...
+ * 污水处理: WS-01, WS-02 ...
+ * 其他: 使用 zone 前缀
+ */
+const SENSOR_CODE_COUNTERS = {}
+function generateSensorCode(areaType, zone, isPumpArea) {
+  let prefix = 'GN'
+  if (isPumpArea) prefix = 'PF'
+  else if (areaType === 'tank' || zone === 'tank_farm') prefix = 'TK'
+  else if (areaType === 'tower' || zone === 'tower_area') prefix = 'TW'
+  else if (areaType === 'production' && (zone === 'prod_a' || zone === 'prod_b')) prefix = 'SC'
+  else if (areaType === 'office' || zone === 'admin') prefix = 'BG'
+  else if (areaType === 'warehouse' || zone === 'warehouse') prefix = 'WH'
+  else if (areaType === 'utility' || zone === 'utility') prefix = 'GE'
+  else if (zone === 'treatment') prefix = 'WS'
+
+  if (!SENSOR_CODE_COUNTERS[prefix]) SENSOR_CODE_COUNTERS[prefix] = 1
+  const seq = String(SENSOR_CODE_COUNTERS[prefix]++).padStart(2, '0')
+  return `${prefix}-${seq}`
+}
+
+/** 优先级标签映射 */
+function getPriorityLabel(priority) {
+  const labels = { 1: '高危重点监测', 2: '常规监测', 3: '辅助覆盖' }
+  return labels[priority] || '常规监测'
+}
+function normalizeManualSensorNumber(value, fallback, min, max, precision = 1) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return fallback
+  const normalized = clamp(num, min, max)
+  return Number(normalized.toFixed(precision))
+}
+function getNormalizedManualSensorDraft() {
+  return {
+    installationHeight: normalizeManualSensorNumber(
+      manualSensorDraft.installationHeight,
+      MANUAL_SENSOR_DEFAULTS.installationHeight,
+      0.3,
+      10,
+      1
+    ),
+    effectiveRange: normalizeManualSensorNumber(
+      manualSensorDraft.effectiveRange,
+      MANUAL_SENSOR_DEFAULTS.effectiveRange,
+      5,
+      100,
+      0
+    ),
+    detectionRange: manualSensorDraft.detectionRange?.trim() || MANUAL_SENSOR_DEFAULTS.detectionRange,
+    installRemark: manualSensorDraft.installRemark?.trim() || MANUAL_SENSOR_DEFAULTS.installRemark,
+  }
+}
+function resolveSensorInstallationHeight(sensor) {
+  return normalizeManualSensorNumber(
+    sensor?.installationHeight,
+    MANUAL_SENSOR_DEFAULTS.installationHeight,
+    0.3,
+    10,
+    1
+  )
+}
+function resolveSensorEffectiveRange(sensor, fallbackRadius = MANUAL_SENSOR_DEFAULTS.effectiveRange) {
+  return normalizeManualSensorNumber(
+    sensor?.effectiveRange,
+    fallbackRadius,
+    5,
+    100,
+    0
+  )
+}
+function resolveSensorDetectionRange(sensor) {
+  return sensor?.detectionRange?.trim() || MANUAL_SENSOR_DEFAULTS.detectionRange
+}
+function resolveSensorInstallRemark(sensor) {
+  return sensor?.installRemark?.trim() || MANUAL_SENSOR_DEFAULTS.installRemark
+}
+function resetManualSensorDraft(keepPoint = false) {
+  Object.assign(manualSensorDraft, createManualSensorDraft())
+  if (!keepPoint) {
+    sensorPlacementState.pendingPoint = null
+  }
+}
+function startManualSensorPicking() {
+  if (leakSourceState.picking) {
+    leakSourceState.picking = false
+  }
+  manualSensorConfigVisible.value = true
+  sensorPlacementState.picking = true
+  canvasEl.style.cursor = 'crosshair'
+  showToast('请点击地图选择传感器安装位置', 'success')
+}
+function captureManualSensorPoint(point) {
+  sensorPlacementState.pendingPoint = normalizeMapPoint(point)
+  sensorPlacementState.picking = false
+  manualSensorConfigVisible.value = true
+  canvasEl.style.cursor = measureMode.value ? 'crosshair' : 'grab'
+  showToast('已记录候选点位，请确认参数后添加传感器', 'success')
+}
+function cancelManualSensorPlacement() {
+  sensorPlacementState.picking = false
+  manualSensorConfigVisible.value = false
+  resetManualSensorDraft()
+  canvasEl.style.cursor = measureMode.value ? 'crosshair' : 'grab'
+  showToast('已取消手动传感器布点', 'warn')
+}
+function confirmManualSensorPlacement() {
+  if (!sensorPlacementState.pendingPoint) {
+    showToast('请先点击地图选择传感器安装位置', 'warn')
+    return
+  }
+  const config = getNormalizedManualSensorDraft()
+  Object.assign(manualSensorDraft, config)
+  placeManualSensorAtPoint(sensorPlacementState.pendingPoint, config)
+}
+
+/**
+ * 高斯烟羽模型 —— 计算传感器位置的理论气体浓度（ppm）
+ * 作为仿真浓度依据，非严格工程计算，但体现扩散物理趋势：
+ * - 距泄漏源越近 ppm 越高
+ * - 下风向浓度高于上风向
+ * - 风速越大稀释越快
+ */
+function computeGasConcentration(sensor, leakPoint, windSpeed, windDir, sourceRate) {
+  if (!leakPoint || !sensor) return 0
+  const dx = sensor.x - leakPoint.x
+  const dy = sensor.y - leakPoint.y
+  const dist = Math.hypot(dx, dy)
+  if (dist < 1) return Math.min(500, (sourceRate || 50) * 10)
+
+  // 计算传感器相对于泄漏源的方向角
+  const angle = Math.atan2(dx, -dy) * (180 / Math.PI)
+  const normalizedAngle = ((angle % 360) + 360) % 360
+
+  // 判断是否在下风向（与风向夹角 < 60 度）
+  const windDiff = Math.abs(normalizedAngle - (windDir || 135))
+  const isDownwindDir = Math.min(windDiff, 360 - windDiff) < 60
+
+  // 高斯烟羽简化计算
+  const Q = (sourceRate || 50) * 1000 // 源强 (g/s 换算)
+  const u = Math.max(0.5, windSpeed || 2) // 风速
+  const sigmaY = 0.08 * dist / Math.sqrt(u) // 水平扩散参数
+  const sigmaZ = 0.06 * dist / Math.sqrt(u) // 垂直扩散参数
+
+  // 下风向增强因子，上风向衰减
+  const downwindFactor = isDownwindDir ? 1.0 : 0.15
+
+  // 简化高斯公式（假设地面泄漏，不考虑反射项细节）
+  const baseConcentration = (Q / (2 * Math.PI * u * sigmaY * sigmaZ)) * downwindFactor
+  const concentration = baseConcentration * Math.exp(-dist / 200)
+
+  // 归一化到合理 ppm 范围
+  const ppm = Math.min(1000, Math.max(0, concentration * 0.5))
+  return Math.round(ppm * 100) / 100
+}
+
+// 重置传感器编号计数器（用于重新布局时重新编号）
+function resetSensorCodeCounters() {
+  Object.keys(SENSOR_CODE_COUNTERS).forEach(k => delete SENSOR_CODE_COUNTERS[k])
+}
 
 function worldToScreen(wx, wy) {
   return {
@@ -1892,14 +2688,14 @@ function drawGround() {
     ctx.fill()
   }
   const zoneBgs = [
-    { x:60, y:50, w:250, h:170, color:'#1e2826' },
-    { x:340, y:50, w:310, h:170, color:'#1e2826' },
-    { x:680, y:50, w:290, h:170, color:'#1e2826' },
-    { x:60, y:250, w:280, h:160, color:'#1c2630' },
-    { x:520, y:250, w:230, h:160, color:'#231e28' },
-    { x:400, y:430, w:260, h:130, color:'#1e2428' },
-    { x:780, y:430, w:220, h:150, color:'#22251e' },
-    { x:60, y:490, w:220, h:120, color:'#1a2430' },
+    { x:78, y:55, w:247, h:170, color:'#1e2826' },
+    { x:355, y:55, w:320, h:170, color:'#1e2826' },
+    { x:705, y:55, w:240, h:170, color:'#1e2826' },
+    { x:78, y:255, w:247, h:165, color:'#1c2630' },
+    { x:355, y:255, w:320, h:165, color:'#231e28' },
+    { x:355, y:452, w:320, h:143, color:'#1e2428' },
+    { x:705, y:452, w:240, h:143, color:'#22251e' },
+    { x:78, y:452, w:247, h:143, color:'#1a2430' },
   ]
   zoneBgs.forEach(z => { ctx.fillStyle = z.color; ctx.fillRect(z.x, z.y, z.w, z.h) })
 }
@@ -1962,7 +2758,6 @@ function drawPipes() {
 }
 function drawBuildings() {
   const typeColors = { office:'#5a4a3a', production:'#3a5a4a', utility:'#3a4a5a', warehouse:'#4a4a3a', treatment:'#2a4a5a' }
-  const statusColors = { '正常':'#00e5a0', '运行中':'#38bdf8', '维护中':'#ff6b35', '告警':'#ef4444', '待机':'#8899aa' }
   facilities.filter(f => ['office','production','utility','warehouse','treatment'].includes(f.type)).forEach(f => {
     if (!matchFilter(f)) return
     ctx.fillStyle = 'rgba(0,0,0,0.25)'
@@ -1975,15 +2770,9 @@ function drawBuildings() {
     for (let lx = f.x + 8; lx < f.x + f.w; lx += 10) {
       ctx.beginPath(); ctx.moveTo(lx, f.y); ctx.lineTo(lx, f.y + f.h); ctx.stroke()
     }
-    const sc = statusColors[f.status] || '#8899aa'
-    ctx.fillStyle = sc; ctx.beginPath(); ctx.arc(f.x + f.w - 8, f.y + 8, 3, 0, Math.PI * 2); ctx.fill()
-    ctx.globalAlpha = 0.3
-    ctx.beginPath(); ctx.arc(f.x + f.w - 8, f.y + 8, 6, 0, Math.PI * 2); ctx.fill()
-    ctx.globalAlpha = 1
   })
 }
 function drawTanks() {
-  const statusColors = { '正常':'#00e5a0', '运行中':'#38bdf8', '维护中':'#ff6b35', '告警':'#ef4444' }
   facilities.filter(f => f.type === 'tank').forEach(f => {
     if (!matchFilter(f)) return
     const { x: cx, y: cy, r } = f
@@ -2001,8 +2790,6 @@ function drawTanks() {
       ctx.lineTo(cx + (r - 2) * Math.cos(la), cy + (r - 2) * Math.sin(la))
       ctx.closePath(); ctx.fill()
     }
-    const sc = statusColors[f.status] || '#8899aa'
-    ctx.fillStyle = sc; ctx.beginPath(); ctx.arc(cx + r - 4, cy - r + 4, 3, 0, Math.PI * 2); ctx.fill()
     if (f.status === '告警') {
       const ba = 0.3 + 0.3 * Math.sin(Date.now() / 300)
       ctx.strokeStyle = `rgba(239,68,68,${ba})`; ctx.lineWidth = 2
@@ -2011,7 +2798,6 @@ function drawTanks() {
   })
 }
 function drawTowers() {
-  const statusColors = { '正常':'#00e5a0', '运行中':'#38bdf8', '维护中':'#ff6b35', '告警':'#ef4444' }
   facilities.filter(f => f.type === 'tower').forEach(f => {
     if (!matchFilter(f)) return
     const { x: cx, y: cy, r, h } = f
@@ -2039,8 +2825,6 @@ function drawTowers() {
     ctx.fillStyle = '#8a7a9a'
     ctx.beginPath(); ctx.ellipse(cx, topY, topW, topW * 0.25, 0, 0, Math.PI * 2); ctx.fill()
     ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 0.5; ctx.stroke()
-    const sc = statusColors[f.status] || '#8899aa'
-    ctx.fillStyle = sc; ctx.beginPath(); ctx.arc(cx + topW - 2, topY - 2, 3, 0, Math.PI * 2); ctx.fill()
     if (f.status === '维护中') {
       ctx.strokeStyle = 'rgba(255,107,53,0.4)'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3])
       ctx.beginPath(); ctx.ellipse(cx, cy, r + 6, h / 2 + 6, 0, 0, Math.PI * 2); ctx.stroke()
@@ -2067,8 +2851,8 @@ function drawLabels() {
   const zl = [
     { text:'行政办公区', x:185, y:60 }, { text:'化工生产一区', x:495, y:60 },
     { text:'精细化工厂房', x:790, y:60 }, { text:'储罐区', x:210, y:270 },
-    { text:'塔器区', x:635, y:260 }, { text:'公用工程区', x:530, y:438 },
-    { text:'仓储物流区', x:890, y:438 }, { text:'污水处理区', x:170, y:498 },
+    { text:'塔器区', x:555, y:260 }, { text:'公用工程区', x:530, y:438 },
+    { text:'仓储物流区', x:822, y:438 }, { text:'污水处理区', x:170, y:498 },
   ]
   zl.forEach(z => {
     const tw = ctx.measureText(z.text).width
@@ -2394,7 +3178,8 @@ function drawHover(f) {
   ctx.setLineDash([])
 }
 function drawMeasure() {
-  ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 2; ctx.setLineDash([4, 4])
+  const s = Math.max(0.1, viewState.scale || 1)
+  ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 1.5 / s; ctx.setLineDash([4, 4])
   ctx.beginPath(); ctx.moveTo(measurePoints[0].x, measurePoints[0].y)
   for (let i = 1; i < measurePoints.length; i++) ctx.lineTo(measurePoints[i].x, measurePoints[i].y)
   ctx.stroke(); ctx.setLineDash([])
@@ -2406,16 +3191,16 @@ function drawMeasure() {
     totalDist += dist
     const mx = (measurePoints[i].x + measurePoints[i - 1].x) / 2
     const my = (measurePoints[i].y + measurePoints[i - 1].y) / 2
-    ctx.fillStyle = '#ff6b35'; ctx.font = 'bold 10px Orbitron'; ctx.textAlign = 'center'
-    ctx.fillText((dist * 0.5).toFixed(1) + 'm', mx, my - 8)
+    ctx.fillStyle = '#ff6b35'; ctx.font = 'bold 8px Orbitron'; ctx.textAlign = 'center'
+    ctx.fillText((dist * 0.5).toFixed(1) + 'm', mx, my - 6 / s)
   }
   if (measurePoints.length > 1) {
-    ctx.fillStyle = '#ff6b35'; ctx.font = 'bold 11px Orbitron'; ctx.textAlign = 'left'
+    ctx.fillStyle = '#ff6b35'; ctx.font = 'bold 9px Orbitron'; ctx.textAlign = 'left'
     const lp = measurePoints[measurePoints.length - 1]
-    ctx.fillText('Total: ' + (totalDist * 0.5).toFixed(1) + 'm', lp.x + 10, lp.y)
+    ctx.fillText('Total: ' + (totalDist * 0.5).toFixed(1) + 'm', lp.x + 6 / s, lp.y)
   }
   measurePoints.forEach(p => {
-    ctx.fillStyle = '#ff6b35'; ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#ff6b35'; ctx.beginPath(); ctx.arc(p.x, p.y, 2 / s, 0, Math.PI * 2); ctx.fill()
   })
 }
 
@@ -2531,7 +3316,7 @@ function onCanvasMouseUp(e) {
         return
       }
       if (sensorPlacementState.picking) {
-        placeManualSensorAtPoint(w)
+        captureManualSensorPoint(w)
         viewState.dragging = false
         isDragging.value = false
         return
@@ -3145,6 +3930,12 @@ function normalizeManualSeries(manualSeries, frames = diffusionFrames.value) {
   }))
 }
 function buildActiveSensorSeries(sensorList, frames = diffusionFrames.value) {
+  // 若扩散帧数据为空，使用高斯烟羽模型估算浓度作为基线
+  const hasFrames = frames && frames.length > 0
+  const leakPoint = currentLeakSourcePoint.value || (diffusionMeta.value?.sourcePoint ? normalizeMapPoint(diffusionMeta.value.sourcePoint) : null)
+  const windSpeed = weatherState.value.windSpeed
+  const windDir = weatherState.value.windDir
+
   const autoSampledSensors = attachSensorSampleSeries(
     sensorList.map(sensor => ({
       ...sensor,
@@ -3153,11 +3944,28 @@ function buildActiveSensorSeries(sensorList, frames = diffusionFrames.value) {
     frames
   )
   return autoSampledSensors.map(sensor => {
-    const autoSampledSeries = (sensor.sampledSeries || []).map(item => ({
+    let autoSampledSeries = (sensor.sampledSeries || []).map(item => ({
       frameIndex: item.frameIndex,
       timeSec: item.timeSec,
       concentration: normalizeSeriesConcentration(item.concentration),
     }))
+
+    // 无扩散帧数据时：用高斯烟羽模型生成仿真浓度序列
+    if (!hasFrames && leakPoint) {
+      const sourceRate = diffusionForm.sourceRate || 50
+      for (let t = 0; t < 12; t++) {
+        const timeSec = t * 10
+        // 随时间推移浓度递增后稳定
+        const timeFactor = Math.min(1, t / 6)
+        const baseConc = computeGasConcentration(sensor, leakPoint, windSpeed, windDir, sourceRate)
+        autoSampledSeries.push({
+          frameIndex: t,
+          timeSec,
+          concentration: baseConc * timeFactor * (0.8 + Math.random() * 0.4)
+        })
+      }
+    }
+
     const manualSeries = normalizeManualSeries(sensor.manualSeries, frames)
     const activeSeries = (sensor.mode || 'auto') === 'manual' ? manualSeries : autoSampledSeries
     const sampledPeak = activeSeries.reduce((max, item) => Math.max(max, item.concentration || 0), 0)
@@ -3169,6 +3977,7 @@ function buildActiveSensorSeries(sensorList, frames = diffusionFrames.value) {
       sampledSeries: activeSeries,
       sampledPeak: Number(sampledPeak.toFixed(2)),
       sampledFrames: activeSeries.length,
+      lastSampleTime: sensor.lastSampleTime || Date.now(),
     }
   })
 }
@@ -3270,35 +4079,64 @@ function resampleSensorsFromDiffusion() {
   }
 }
 function seedDemoSensors() {
-  if (sensors.value.length) return
-  sensors.value = buildActiveSensorSeries(demoSensorSeeds.map(seed => ({
-    ...seed,
-    risk: 0.45,
-    mode: 'auto',
-    manualSeries: [],
-  })), diffusionFrames.value)
+  // 不再自动生成传感器，全部由用户手动添加
+  sensors.value = []
 }
-function placeManualSensorAtPoint(point) {
+/**
+ * 手动新增传感器
+ * 统一使用 'gas' 类型（四气方尊传感器），priority 根据附近风险级别决定
+ */
+function placeManualSensorAtPoint(point, sensorConfig = getNormalizedManualSensorDraft()) {
   const normalizedPoint = normalizeMapPoint(point)
   const nearRisk = riskGrid.value.find(g => Math.hypot(g.x - normalizedPoint.x, g.y - normalizedPoint.y) < 50)
   const riskVal = nearRisk?.risk || 0.3
-  const priority = riskVal > 0.7 ? 3 : riskVal > 0.4 ? 2 : 1
-  const type = priority === 3 ? 'leak' : priority === 2 ? 'gas' : 'temp'
+  const priority = riskVal > 0.7 ? 1 : riskVal > 0.4 ? 2 : 3
+  // 统一使用 gas 类型（四气方尊传感器，支持 CO/可燃气体/H₂S/O₂）
+  // 使用工程命名生成传感器编号
+  let areaType = 'tank', zone = 'tank_farm', isPumpArea = false
+  for (const f of facilities) {
+    if (f.type === 'tank' || f.type === 'tower') {
+      if (Math.hypot(normalizedPoint.x - f.x, normalizedPoint.y - f.y) < 100) { areaType = f.type; zone = f.zone; break }
+    } else {
+      const cx = f.x + (f.w || 0) / 2, cy = f.y + (f.h || 0) / 2
+      if (Math.hypot(normalizedPoint.x - cx, normalizedPoint.y - cy) < Math.max(f.w || 40, f.h || 40) * 0.8) {
+        areaType = f.type; zone = f.zone
+        if (f.name.includes('压缩机') || f.name.includes('泵房')) isPumpArea = true
+        break
+      }
+    }
+  }
+  const sensorId = generateSensorCode(areaType, zone, isPumpArea)
   sensors.value.push({
-    id: `S_MAN_${Date.now()}`,
+    id: sensorId,
     x: normalizedPoint.x,
     y: normalizedPoint.y,
-    type,
+    type: 'gas',
     risk: riskVal,
     priority,
+    installationHeight: sensorConfig.installationHeight,
+    effectiveRange: sensorConfig.effectiveRange,
+    detectionRange: sensorConfig.detectionRange,
+    installRemark: sensorConfig.installRemark,
     mode: 'auto',
+    lastSampleTime: null,
     manualSeries: buildFrameSeriesTemplate().map(item => ({ ...item })),
   })
   sensorPlacementState.picking = false
+  sensorPlacementState.pendingPoint = null
+  manualSensorConfigVisible.value = false
+  resetManualSensorDraft()
   resampleSensorsFromDiffusion()
+  const createdSensor = sensors.value.find(sensor => sensor.id === sensorId) || null
+  if (createdSensor) {
+    selectedSensor.value = createdSensor
+    showSensorInfo(createdSensor)
+  }
   calcCoverage()
   updateRiskStat()
   canvasEl.style.cursor = measureMode.value ? 'crosshair' : 'grab'
+  // 保存到数据库（异步，不影响前端体验）
+  saveSensorToDB(createdSensor || sensors.value[sensors.value.length - 1])
   showToast('手动新增传感器成功，已绑定当前扩散采样数据', 'success')
   render()
 }
@@ -3333,6 +4171,7 @@ function applySelectedSensorManualValueToCurrentFrame() {
         ? { ...item, concentration }
         : item
     ))
+    sensor.lastSampleTime = Date.now()
     return sensor
   })
   sensorEditorState.currentFrameConcentration = concentration
@@ -3354,6 +4193,7 @@ function fillSelectedSensorManualSeries() {
       ...item,
       concentration,
     }))
+    sensor.lastSampleTime = Date.now()
     return sensor
   })
   sensorEditorState.currentFrameConcentration = concentration
@@ -3372,6 +4212,7 @@ function copyAutoSeriesToSelectedSensorManual() {
       timeSec: item.timeSec,
       concentration: normalizeSeriesConcentration(item.concentration),
     }))
+    sensor.lastSampleTime = Date.now()
     return sensor
   })
   showToast('已复制自动采样曲线到手动序列', 'success')
@@ -3672,34 +4513,115 @@ function updateClock() {
   clock.value = new Date().toTimeString().split(' ')[0]
 }
 
+/**
+ * 判断某网格是否位于某设施的下风向
+ * @param {Object} cell - 网格点 {x, y}
+ * @param {Object} source - 设施锚点 {x, y}
+ * @param {number} windDir - 风向角度（度），表示风吹向的方向（0=北, 90=东, 180=南, 270=西）
+ * @param {number} angleTolerance - 下风向角度范围（度）
+ * @returns {boolean}
+ *
+ * 注意：如果项目中 windDir 表示风来的方向，需加 180 度转换。当前按"风吹向方向"处理。
+ */
+function isDownwind(cell, source, windDir, angleTolerance = 50) {
+  const dx = cell.x - source.x
+  const dy = cell.y - source.y
+  const len = Math.hypot(dx, dy)
+  if (len < 1) return false
+
+  // 风向单位向量（canvas 坐标：x 向右，y 向下，北为 -y 方向）
+  const windRad = windDir * Math.PI / 180
+  const wx = Math.sin(windRad)
+  const wy = -Math.cos(windRad)
+
+  // 设施到网格的单位方向向量
+  const cx = dx / len
+  const cy = dy / len
+
+  // 点积：若两者方向一致，则位于下风向
+  const dot = cx * wx + cy * wy
+  const threshold = Math.cos(angleTolerance * Math.PI / 180)
+  return dot >= threshold
+}
+
+/**
+ * 基于标准思想的风险网格计算
+ * 注意：此处不是严格工程验收级布点，而是参考 GB/T 50493 思想，
+ * 将泄漏源距离、设备状态、风向和最小间距作为仿真布点规则。
+ *
+ * 风险构成：
+ * 1. 距离风险：距罐区/塔器/重点设施越近风险越高
+ * 2. 设备状态风险：仅升高告警/维护设施附近格子的风险（非全局）
+ * 3. 风向修正：高风险设施下风向区域风险增加
+ */
 function computeRiskGrid() {
   const gridSize = 10
   const gridW = 1000 / gridSize
   const gridH = 650 / gridSize
+  const cfg = SENSOR_LAYOUT_CONFIG
+
+  // 预计算设施锚点（提升性能），含 hazardLevel
+  const facilityPoints = facilities.map(f => {
+    let fx = f.x, fy = f.y
+    if (f.type !== 'tank' && f.type !== 'tower') { fx += f.w / 2; fy += f.h / 2 }
+    const hazardLevel = f.hazardLevel || 0.3
+    const isHighRisk = f.type === 'tank' || f.type === 'tower' || f.key
+    return { fx, fy, isHighRisk, status: f.status, hazardLevel }
+  })
+
   const grid = []
   for (let i = 0; i < gridW; i++) {
     for (let j = 0; j < gridH; j++) {
       const x = i * gridSize + gridSize / 2
       const y = j * gridSize + gridSize / 2
+      let risk = 0
+
+      // 1. 距离风险：使用 hazardLevel 作为权重（高危物料设施影响显著更大）
       let distRisk = 0
-      facilities.forEach(f => {
-        let fx = f.x, fy = f.y
-        if (f.type !== 'tank' && f.type !== 'tower') { fx += f.w / 2; fy += f.h / 2 }
-        const d = Math.hypot(x - fx, y - fy)
-        const weight = f.type === 'tank' || f.type === 'tower' || f.key ? 2.0 : 1.0
-        distRisk += weight / (d * d + 1e-6)
+      facilityPoints.forEach(f => {
+        const d = Math.hypot(x - f.fx, y - f.fy)
+        if (d < cfg.sourceInfluenceRadius) {
+          const influence = 1 - d / cfg.sourceInfluenceRadius
+          // hazardLevel 直接作为权重：液氨 1.0 → 全影响，办公区 0.15 → 微影响
+          distRisk += influence * f.hazardLevel
+        }
       })
-      let deviceRisk = 0
-      facilities.forEach(f => {
-        if (f.status === '告警') deviceRisk += 0.9
-        if (f.status === '维护中') deviceRisk += 0.4
+      risk += distRisk * 0.35
+
+      // 2. 设备状态风险：仅影响告警/维护设施附近格子（非全局叠加）
+      facilityPoints.forEach(f => {
+        if (f.status === '告警' || f.status === '维护中') {
+          const d = Math.hypot(x - f.fx, y - f.fy)
+          const radius = 150
+          if (d < radius) {
+            const influence = 1 - d / radius
+            const factor = f.status === '告警' ? cfg.alertBonus : cfg.maintenanceBonus
+            risk += factor * influence * 0.25
+          }
+        }
       })
-      const weatherFactor = (weatherState.value.windSpeed / 10) * 0.3
-      const total = Math.min(1.0, distRisk * 0.5 + deviceRisk * 0.35 + weatherFactor * 0.15)
+
+      // 3. 风向修正：高风险设施（hazardLevel > 0.6）下风向区域增加风险
+      const windSpeed = weatherState.value.windSpeed
+      if (windSpeed > 0.5) {
+        const windSpeedFactor = Math.min(1, windSpeed / 10)
+        facilityPoints.forEach(f => {
+          if (f.hazardLevel > 0.6 && isDownwind({ x, y }, { x: f.fx, y: f.fy }, weatherState.value.windDir, 50)) {
+            const d = Math.hypot(x - f.fx, y - f.fy)
+            if (d < cfg.sourceInfluenceRadius) {
+              const influence = 1 - d / cfg.sourceInfluenceRadius
+              risk += influence * cfg.downwindBonus * windSpeedFactor
+            }
+          }
+        })
+      }
+
+      risk = Math.min(1, Math.max(0, risk))
+
       grid.push({
-        x, y, gridSize, risk: total,
-        level: total > 0.7 ? '高' : total > 0.4 ? '中' : '低',
-        priority: total > 0.7 ? 3 : total > 0.4 ? 2 : 1
+        x, y, gridSize, risk,
+        level: risk > 0.7 ? '高' : risk > 0.4 ? '中' : '低',
+        priority: risk > 0.7 ? 1 : risk > 0.4 ? 2 : 3
       })
     }
   }
@@ -3713,8 +4635,10 @@ function calcCoverage() {
   riskGrid.value.forEach(g => {
     let covered = false
     sensors.value.forEach(s => {
+      const type = sensorTypes.find(t => t.id === s.type)
+      const r = resolveSensorEffectiveRange(s, type?.radius || MANUAL_SENSOR_DEFAULTS.effectiveRange)
       const d = Math.hypot(g.x - s.x, g.y - s.y)
-      if (d <= sensorTypes.find(t => t.id === s.type).radius) covered = true
+      if (d <= r) covered = true
     })
     if (covered) coverCount++
     if (covered && g.risk > 0.5) highRiskCover++
@@ -3727,79 +4651,195 @@ function calcCoverage() {
   }
 }
 
-// ✅ 修复：RL 布局（纯开关，不修改天气）
-function rlOptimizeLayout() {
-  isRLMode.value = !isRLMode.value
+/**
+ * 基于 GB/T 50493 思想的初始基础布局
+ * 注意：此处不是严格工程验收级布点，而是参考国家标准思想，
+ * 将储罐边缘、阀门区、管连接、下风向、泵房等高风险区域作为优先布点目标。
+ */
+function generateBaseStandardLayout() {
+  resetSensorCodeCounters()
+  const layout = []
+  const MIN_DIST = 85
 
-  if (isRLMode.value) {
-    originalSensors = [...sensors.value]
-    const grid = computeRiskGrid()
-    const newSensors = []
-    const highRisk = grid.filter(g => g.risk > 0.55).sort((a, b) => b.risk - a.risk)
-    const used = new Set()
-    highRisk.forEach(cell => {
-      const key = `${Math.round(cell.x / 15)}_${Math.round(cell.y / 15)}`
-      if (used.has(key)) return
-      used.add(key)
-      const type = cell.risk > 0.7 ? 'leak' : cell.risk > 0.5 ? 'gas' : 'temp'
-      newSensors.push({
-        id: 'S_' + Date.now() + Math.random(),
-        x: cell.x, y: cell.y, type, risk: cell.risk, priority: cell.priority
-      })
+  const tankFacilities = facilities.filter(f => f.type === 'tank')
+  const towerFacilities = facilities.filter(f => f.type === 'tower')
+  const productionFacilities = facilities.filter(f => f.type === 'production')
+  const utilityFacilities = facilities.filter(f => f.type === 'utility')
+  const warehouseFacilities = facilities.filter(f => f.type === 'warehouse')
+  const treatmentFacilities = facilities.filter(f => f.type === 'treatment')
+  const officeFacilities = facilities.filter(f => f.type === 'office')
+
+  function tooClose(x, y) {
+    return layout.some(s => Math.hypot(s.x - x, s.y - y) < MIN_DIST)
+  }
+  function addSensor(x, y, priority, risk) {
+    if (tooClose(x, y)) return
+    let areaType = 'tank'
+    let zone = 'tank_farm'
+    let isPumpArea = false
+    for (const f of facilities) {
+      if (f.type === 'tank' || f.type === 'tower') {
+        if (Math.hypot(x - f.x, y - f.y) < 100) { areaType = f.type; zone = f.zone; break }
+      } else {
+        const cx = f.x + (f.w || 0) / 2, cy = f.y + (f.h || 0) / 2
+        if (Math.hypot(x - cx, y - cy) < Math.max(f.w || 40, f.h || 40) * 0.8) {
+          areaType = f.type; zone = f.zone
+          if (f.name.includes('压缩机') || f.name.includes('泵房')) isPumpArea = true
+          break
+        }
+      }
+    }
+    layout.push({
+      id: generateSensorCode(areaType, zone, isPumpArea),
+      x, y, type: 'gas',
+      risk: risk || 0.5,
+      priority: priority || 2,
+      mode: 'auto',
+      lastSampleTime: null,
+      manualSeries: []
     })
-    sensors.value = newSensors.slice(0, 25)
-    resampleSensorsFromDiffusion()
-    showToast(`RL智能布局已启用`, 'success')
-  } else {
-    sensors.value = originalSensors
-    resampleSensorsFromDiffusion()
-    showToast(`RL布局已关闭，恢复原始布局`, 'success')
   }
 
-  calcCoverage()
-  updateRiskStat()
-  render()
+  // 1. 储罐区：每个储罐边缘多方位布点（阀门区、管道连接方向）
+  tankFacilities.forEach(tank => {
+    const offsets = [
+      { dx: tank.r * 0.9, dy: 0 }, { dx: -tank.r * 0.9, dy: 0 },
+      { dx: 0, dy: tank.r * 0.9 }, { dx: 0, dy: -tank.r * 0.9 },
+    ]
+    offsets.forEach(off => {
+      const hazard = tank.hazardLevel || 0.5
+      addSensor(tank.x + off.dx, tank.y + off.dy,
+        hazard > 0.7 ? 1 : hazard > 0.4 ? 2 : 3,
+        Math.min(0.95, 0.4 + hazard * 0.4))
+    })
+    if ((tank.hazardLevel || 0.5) > 0.7) {
+      addSensor(tank.x + tank.r * 0.3, tank.y + tank.r * 0.3, 1, 0.75)
+    }
+  })
+
+  // 2. 塔器区：塔器连接区域 + 下风向重点
+  towerFacilities.forEach(tower => {
+    addSensor(tower.x + tower.r * 0.8, tower.y + tower.h * 0.3, 2, 0.55)
+    addSensor(tower.x - tower.r * 0.8, tower.y + tower.h * 0.6, 2, 0.55)
+    if ((tower.hazardLevel || 0.5) > 0.6) {
+      addSensor(tower.x, tower.y + tower.h * 0.9, 1, 0.70)
+    }
+  })
+
+  // 3. 泵房 / 压缩机：高危泄漏源重点覆盖
+  productionFacilities.filter(f =>
+    f.name.includes('压缩机') || f.name.includes('泵房') || f.name.includes('配料')
+  ).forEach(pump => {
+    const cx = pump.x + pump.w / 2, cy = pump.y + pump.h / 2
+    addSensor(cx - pump.w * 0.3, cy, 1, 0.70)
+    addSensor(cx + pump.w * 0.3, cy, 1, 0.70)
+  })
+
+  // 4. 生产车间：重点装置
+  productionFacilities.filter(f =>
+    !f.name.includes('压缩机') && !f.name.includes('配料') && !f.name.includes('控制室')
+  ).forEach(p => {
+    const cx = p.x + p.w / 2, cy = p.y + p.h / 2
+    const hazard = p.hazardLevel || 0.5
+    addSensor(cx, cy + p.h * 0.4, hazard > 0.6 ? 2 : 3, 0.35 + hazard * 0.3)
+  })
+
+  // 5. 仓储区：危化品库重点覆盖
+  warehouseFacilities.forEach(w => {
+    const cx = w.x + w.w / 2, cy = w.y + w.h / 2
+    if ((w.hazardLevel || 0.3) > 0.6) {
+      addSensor(cx - w.w * 0.25, cy, 1, 0.70)
+      addSensor(cx + w.w * 0.25, cy, 2, 0.50)
+    } else {
+      addSensor(cx, cy, 3, 0.30)
+    }
+  })
+
+  // 6. 公用工程 + 污水处理 + 办公区
+  utilityFacilities.forEach(u => {
+    const cx = u.x + u.w / 2, cy = u.y + u.h / 2
+    addSensor(cx, cy, 3, 0.25)
+  })
+  treatmentFacilities.forEach(t => {
+    const cx = t.x + t.w / 2, cy = t.y + t.h / 2
+    addSensor(cx, cy, 2, 0.40)
+  })
+  officeFacilities.forEach(o => {
+    const cx = o.x + o.w / 2, cy = o.y + o.h / 2
+    addSensor(cx + 20, cy, 3, 0.15)
+  })
+
+  return layout
 }
 
-// ✅ 修复：气象优化（更新天气 + 重新布局，不做开关）
-function updateWeatherAndOptimize() {
-  // 随机更新气象参数
-  weatherState.value = {
-    windSpeed: 1 + Math.random() * 8,
-    windDir: Math.random() * 360,
-    temp: 20 + Math.random() * 20
-  }
+/**
+ * 基于标准思想的传感器布局生成
+ * 此处不是严格工程验收级布点，而是参考 GB/T 50493 思想，
+ * 将泄漏源距离、设备状态、风向和最小间距作为仿真布点规则。
+ */
+function generateStandardBasedSensorLayout(grid) {
+  const cfg = SENSOR_LAYOUT_CONFIG
+  resetSensorCodeCounters()
+  const candidates = grid
+    .filter(cell => cell.risk > cfg.highRiskThreshold)
+    .sort((a, b) => b.risk - a.risk)
 
-  if (isRLMode.value) {
-    // RL开启：用新天气重新计算布局
-    const grid = computeRiskGrid()
-    const newSensors = []
-    const highRisk = grid.filter(g => g.risk > 0.55).sort((a, b) => b.risk - a.risk)
-    const used = new Set()
-    highRisk.forEach(cell => {
-      const key = `${Math.round(cell.x / 15)}_${Math.round(cell.y / 15)}`
-      if (used.has(key)) return
-      used.add(key)
-      const type = cell.risk > 0.7 ? 'leak' : cell.risk > 0.5 ? 'gas' : 'temp'
-      newSensors.push({
-        id: 'S_' + Date.now() + Math.random(),
-        x: cell.x, y: cell.y, type, risk: cell.risk, priority: cell.priority
-      })
+  const selected = []
+
+  for (const cell of candidates) {
+    const minDist = dynamicMinDistance(cell)
+    let tooClose = false
+    for (const s of selected) {
+      const d = Math.hypot(cell.x - s.x, cell.y - s.y)
+      if (d < minDist) {
+        tooClose = true
+        break
+      }
+    }
+    if (tooClose) continue
+
+    // 判断所属区域类型用于编号
+    let areaType = 'tank'
+    let zone = 'tank_farm'
+    let isPumpArea = false
+    for (const f of facilities) {
+      if (f.type === 'tank' || f.type === 'tower') {
+        if (Math.hypot(cell.x - f.x, cell.y - f.y) < 100) { areaType = f.type; zone = f.zone; break }
+      } else {
+        const cx = f.x + (f.w || 0) / 2, cy = f.y + (f.h || 0) / 2
+        if (Math.hypot(cell.x - cx, cell.y - cy) < Math.max(f.w || 40, f.h || 40) * 0.8) {
+          areaType = f.type; zone = f.zone
+          if (f.name.includes('压缩机') || f.name.includes('泵房')) isPumpArea = true
+          break
+        }
+      }
+    }
+
+    selected.push({
+      id: generateSensorCode(areaType, zone, isPumpArea),
+      x: cell.x,
+      y: cell.y,
+      type: 'gas',
+      risk: cell.risk,
+      priority: cell.priority,
+      mode: 'auto',
+      lastSampleTime: null,
+      manualSeries: []
     })
-    sensors.value = newSensors.slice(0, 25)
-    resampleSensorsFromDiffusion()
-    showToast(`气象已更新，布局已重新优化`, 'success')
-  } else {
-    // RL关闭：只刷新风险热力，不改变传感器
-    computeRiskGrid()
-    resampleSensorsFromDiffusion()
-    updateRiskStat()
-    showToast(`气象已更新，风险热力已刷新`, 'success')
+
+    if (selected.length >= cfg.maxSensors) break
   }
 
-  calcCoverage()
-  render()
+  return selected
 }
+
+/**
+ * 规范化智能布局（切换式）
+ * 注意：此处不是严格工程验收级布点，而是参考 GB/T 50493 思想，
+ * 将泄漏源距离、设备状态、风向和最小间距作为仿真布点规则。
+ *
+ * 开启：生成建议点并询问用户是否应用；关闭：隐藏建议点
+ */
 
 function hexToRgb(hex) {
   const r = parseInt(hex.slice(1, 3), 16)
@@ -3824,10 +4864,11 @@ function drawRiskGrid() {
   })
 }
 function drawSensors() {
+  const ss = Math.max(0.1, viewState.scale || 1)
   const gas = diffusionMeta.value.gas || getGasById(diffusionForm.gasId)
   sensors.value.forEach(s => {
     const type = sensorTypes.find(t => t.id === s.type)
-    const r = type.radius
+    const r = resolveSensorEffectiveRange(s, type?.radius || MANUAL_SENSOR_DEFAULTS.effectiveRange)
     const currentConcentration = getSensorCurrentConcentration(s)
     const alarmLevel = getSensorAlarmLevel(currentConcentration, gas)
     ctx.fillStyle = `rgba(${hexToRgb(type.color)}, 0.12)`
@@ -3835,7 +4876,7 @@ function drawSensors() {
     ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
     ctx.fill()
     ctx.strokeStyle = type.color
-    ctx.lineWidth = 1
+    ctx.lineWidth = 0.8 / ss
     ctx.setLineDash([3, 3])
     ctx.beginPath()
     ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
@@ -3843,21 +4884,21 @@ function drawSensors() {
     ctx.setLineDash([])
     if (selectedSensor.value?.id === s.id) {
       ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth = 2
+      ctx.lineWidth = 1.2 / ss
       ctx.beginPath()
-      ctx.arc(s.x, s.y, 8, 0, Math.PI * 2)
+      ctx.arc(s.x, s.y, 5 / ss, 0, Math.PI * 2)
       ctx.stroke()
     }
     ctx.fillStyle = type.color
     ctx.beginPath()
-    ctx.arc(s.x, s.y, 4, 0, Math.PI * 2)
+    ctx.arc(s.x, s.y, 2.5 / ss, 0, Math.PI * 2)
     ctx.fill()
     if (alarmLevel !== 'normal') {
       const alarmColor = alarmLevel === 'danger' ? '#ef4444' : '#f59e0b'
       ctx.strokeStyle = alarmColor
-      ctx.lineWidth = 1.5
+      ctx.lineWidth = 1 / ss
       ctx.beginPath()
-      ctx.arc(s.x, s.y, 10, 0, Math.PI * 2)
+      ctx.arc(s.x, s.y, 6 / ss, 0, Math.PI * 2)
       ctx.stroke()
     }
     if (showLabels.value) {
@@ -3887,43 +4928,55 @@ function showSensorInfo(s){
   const currentConcentration = getSensorCurrentConcentration(s)
   const autoConcentration = getSensorAutoConcentration(s)
   const peakConcentration = s.sampledPeak || 0
-  const currentFrameTime = currentDiffusionFrame.value?.timeSec ?? 0
   const modeLabel = s.mode === 'manual' ? '手动录入' : '自动采样'
-  infoTitle.value = s.id
+  const priorityLabel = getPriorityLabel(s.priority)
+  const effectiveRange = resolveSensorEffectiveRange(s, type?.radius || MANUAL_SENSOR_DEFAULTS.effectiveRange)
+  const installationHeight = resolveSensorInstallationHeight(s)
+  const detectionRange = resolveSensorDetectionRange(s)
+  const installRemark = resolveSensorInstallRemark(s)
+  const lastTimeStr = s.lastSampleTime
+    ? new Date(s.lastSampleTime).toLocaleTimeString('zh-CN')
+    : '尚未采样'
+
+  infoTitle.value = `${s.id}（${priorityLabel}）`
   infoSubtitle.value = `<span class="tag tag-blue">${type.name}</span><span style="color:var(--fg-muted);font-size:12px;margin-left:4px;">${modeLabel}</span>`
   infoRows.value = [
+    { key:'传感器类型', val: '四气方尊传感器' },
+    { key:'安装高度', val: `${installationHeight.toFixed(1)} m` },
+    { key:'有效监测范围', val: `${effectiveRange} m` },
+    { key:'检测范围', val: detectionRange },
+    { key:'优先级', val: `P${s.priority}（${priorityLabel}）` },
+    { key:'模拟浓度', val: `${currentConcentration.toFixed(2)} ppm` },
+    { key:'最近采样时间', val: lastTimeStr },
     { key:'数据模式', val: modeLabel },
-    { key:'布设优先级', val: `P${s.priority}` },
-    { key:'探测半径', val: `${type.radius}m` },
-    { key:'单点成本', val: `¥${type.cost}` },
-    { key:'当前帧时间', val: `${currentFrameTime.toFixed(0)} s` },
-    { key:'当前浓度', val: `${currentConcentration.toFixed(2)} ppm` },
     { key:'自动基线', val: `${autoConcentration.toFixed(2)} ppm` },
     { key:'采样峰值', val: `${peakConcentration.toFixed(2)} ppm` },
     { key:'采样帧数', val: `${s.sampledFrames || 0}` },
+    { key:'布点说明', val: installRemark || '无' },
+    { key:'单点成本', val: `¥${type.cost}` },
     { key:'所在风险值', val: (s.risk*100).toFixed(1)+'%' },
     { key:'经纬海拔', val: `${geo.longitude} / ${geo.latitude} / ${geo.altitude}` }
   ]
   syncSensorEditorState(s)
 }
 function addManualSensor(){
-  if (leakSourceState.picking) {
-    leakSourceState.picking = false
-  }
-  sensorPlacementState.picking = !sensorPlacementState.picking
-  canvasEl.style.cursor = sensorPlacementState.picking
-    ? 'crosshair'
-    : (measureMode.value ? 'crosshair' : 'grab')
   if (sensorPlacementState.picking) {
-    showToast('点击地图放置手动传感器点位', 'success')
+    sensorPlacementState.picking = false
+    canvasEl.style.cursor = measureMode.value ? 'crosshair' : 'grab'
+    showToast('已取消手动传感器选点', 'warn')
     return
   }
-  showToast('已取消手动传感器选点', 'warn')
+  startManualSensorPicking()
 }
 function clearAllSensor(){
+  // 从数据库删除所有传感器（异步）
+  deleteAllSensorsFromDB()
   sensors.value = []
   selectedSensor.value = null
   sensorPlacementState.picking = false
+  sensorPlacementState.pendingPoint = null
+  manualSensorConfigVisible.value = false
+  resetManualSensorDraft()
   syncSensorEditorState(null)
   calcCoverage()
   updateRiskStat()
@@ -3933,12 +4986,15 @@ function clearAllSensor(){
 }
 function deleteCurrSensor(){
   if(!selectedSensor.value)return
-  sensors.value = sensors.value.filter(s=>s.id!==selectedSensor.value.id)
+  const id = selectedSensor.value.id
+  sensors.value = sensors.value.filter(s=>s.id!==id)
   selectedSensor.value = null
   syncSensorEditorState(null)
   calcCoverage()
   updateRiskStat()
   clearInfo()
+  // 从数据库删除（异步）
+  deleteSensorFromDB(id)
   showToast('已删除当前传感器','danger')
   render()
 }
@@ -3962,13 +5018,19 @@ onMounted(() => {
   window.addEventListener('resize', resizeCanvas)
   animate()
   computeRiskGrid()
-  seedDemoSensors()
   updateRiskStat()
   calcCoverage()
+
+  // 从数据库加载已保存的传感器和气体类型
+  fetchSensorsFromDB()
+  fetchGasList()
 
   // 初始化小车数据并定时刷新
   refreshCarData()
   carRefreshTimer.value = setInterval(refreshCarData, 10000)
+
+  // 初始化实时天气（每30分钟自动刷新）
+  startWeatherAutoRefresh()
 
   setTimeout(() => {
     autoConfigFromCarParams()
@@ -4822,4 +5884,43 @@ watch(
   text-align: center;
   margin-top: 6px;
 }
-</style>
+
+/* ---- 传感器参数编辑浮层 ---- */
+.sensor-edit-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.sensor-edit-panel {
+  width: 420px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background: var(--bg-card, #1a2332);
+  border: 1px solid var(--border, rgba(255,255,255,0.1));
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.sensor-edit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.1));
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--fg, #e0e8f0);
+}
+.sensor-edit-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}</style>

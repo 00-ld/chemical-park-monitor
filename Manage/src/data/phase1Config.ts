@@ -4,28 +4,8 @@ export const MAP_HEIGHT = 650
 export const GRID_SIZE = 20
 export const MAP_METERS_PER_UNIT = 0.5
 
-/* 气体类型配置数据 */
+/* 气体类型配置数据 — 四气检测：CO / 可燃气体 / H2S / O2 */
 export const PHASE1_GASES = [
-  {
-    id: 'h2s',
-    name: '硫化氢',
-    color: '#ef4444',
-    densityRatio: 1.19,
-    diffusionBias: 0.9,
-    warningThreshold: 8,
-    dangerThreshold: 20,
-    blockingThreshold: 24,
-  },
-  {
-    id: 'nh3',
-    name: '液氨',
-    color: '#38bdf8',
-    densityRatio: 0.73,
-    diffusionBias: 1.18,
-    warningThreshold: 18,
-    dangerThreshold: 45,
-    blockingThreshold: 55,
-  },
   {
     id: 'co',
     name: '一氧化碳',
@@ -37,21 +17,41 @@ export const PHASE1_GASES = [
     blockingThreshold: 75,
   },
   {
-    id: 'toluene',
-    name: '甲苯蒸气',
-    color: '#a78bfa',
-    densityRatio: 1.15,
-    diffusionBias: 0.92,
-    warningThreshold: 30,
-    dangerThreshold: 70,
-    blockingThreshold: 85,
+    id: 'h2s',
+    name: '硫化氢',
+    color: '#ef4444',
+    densityRatio: 1.19,
+    diffusionBias: 0.9,
+    warningThreshold: 8,
+    dangerThreshold: 20,
+    blockingThreshold: 24,
+  },
+  {
+    id: 'ch4',
+    name: '甲烷',
+    color: '#38bdf8',
+    densityRatio: 0.55,
+    diffusionBias: 1.5,
+    warningThreshold: 10,
+    dangerThreshold: 20,
+    blockingThreshold: 30,
+  },
+  {
+    id: 'o2',
+    name: '氧气',
+    color: '#22c55e',
+    densityRatio: 1.11,
+    diffusionBias: 0.95,
+    warningThreshold: 19,
+    dangerThreshold: 23,
+    blockingThreshold: 25,
   },
 ]
 
 /* 默认扩散场景参数 */
 export const PHASE1_DEFAULT_SCENARIO = {
-  gasId: 'h2s',
-  sourceFacilityId: 't08',
+  gasId: 'co',
+  sourceFacilityId: 'b23',
   sourceRate: 42,
   releaseDuration: 120,
   initialTemperature: 35,

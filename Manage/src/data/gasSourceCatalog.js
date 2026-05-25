@@ -2,20 +2,6 @@ const MAP_METERS_PER_UNIT = 0.5
 
 export const GAS_SOURCE_CATALOG = [
   {
-    gasId: 'h2s',
-    gasName: '硫化氢',
-    validRadiusMeters: 38,
-    allowedSourceFacilityIds: ['t08', 'tw05'],
-    description: '允许位于硫化氢储罐和脱硫塔相关区域附近',
-  },
-  {
-    gasId: 'nh3',
-    gasName: '液氨',
-    validRadiusMeters: 32,
-    allowedSourceFacilityIds: ['t07'],
-    description: '允许位于氨气储罐附近',
-  },
-  {
     gasId: 'co',
     gasName: '一氧化碳',
     validRadiusMeters: 36,
@@ -23,11 +9,25 @@ export const GAS_SOURCE_CATALOG = [
     description: '允许位于一氧化碳钢瓶库及相关工艺区附近',
   },
   {
-    gasId: 'toluene',
-    gasName: '甲苯蒸气',
-    validRadiusMeters: 35,
-    allowedSourceFacilityIds: ['t02', 'b09'],
-    description: '允许位于溶剂储罐及配料区域附近',
+    gasId: 'h2s',
+    gasName: '硫化氢',
+    validRadiusMeters: 38,
+    allowedSourceFacilityIds: ['t08', 'tw05'],
+    description: '允许位于硫化氢储罐和脱硫塔相关区域附近',
+  },
+  {
+    gasId: 'ch4',
+    gasName: '甲烷',
+    validRadiusMeters: 40,
+    allowedSourceFacilityIds: ['b20', 'b09'],
+    description: '允许位于甲烷储配库及配料区域附近',
+  },
+  {
+    gasId: 'o2',
+    gasName: '氧气',
+    validRadiusMeters: 30,
+    allowedSourceFacilityIds: ['b18'],
+    description: '允许位于氧气制备站附近',
   },
 ]
 
