@@ -7,6 +7,12 @@ export const zones = [
   { id: 'warehouse', name: '仓储物流区', color: '#6a6a5a', tag: '仓储', status: '正常' },
   { id: 'treatment', name: '污水处理区', color: '#4a6a7a', tag: '环保', status: '正常' },
   { id: 'tower_area', name: '塔器区', color: '#8a6a8a', tag: '核心', status: '运行中', key: true },
+  { id: 'prod_b2', name: '化工生产二区', color: '#5a7a6a', tag: '生产', status: '运行中', key: true },
+  { id: 'greenbelt', name: '绿化隔离带', color: '#4a8a5a', tag: '环保', status: '正常' },
+  { id: 'monitoring', name: '环境监测区', color: '#5a8a7a', tag: '监测', status: '正常' },
+  { id: 'fire_safety', name: '消防设施区', color: '#a05a4a', tag: '消防', status: '正常', key: true },
+  { id: 'central_control', name: '中央控制区', color: '#5a6a8a', tag: '管控', status: '运行中', key: true },
+  { id: 'maintenance', name: '机修维护区', color: '#6a6a5a', tag: '辅助', status: '正常' },
 ]
 
 /**
@@ -62,6 +68,14 @@ export const facilities = [
   { id:'b26', name:'生化池', type:'treatment', x:180, y:505, w:90, h:40, zone:'treatment', status:'运行中', volume:'5000m³', desc:'活性污泥生化处理', hazardLevel:0.25 },
   { id:'b27', name:'深度处理间', type:'treatment', x:80, y:570, w:70, h:30, zone:'treatment', status:'运行中', area:'2100m²', desc:'膜过滤与高级氧化', hazardLevel:0.20 },
   { id:'b28', name:'污泥脱水间', type:'treatment', x:180, y:565, w:55, h:30, zone:'treatment', status:'正常', area:'1500m²', desc:'污泥浓缩脱水处理', hazardLevel:0.20 },
+  { id:'b33', name:'反应车间B', type:'production', x:700, y:260, w:90, h:50, zone:'prod_b2', status:'运行中', area:'4500m²', personnel:35, desc:'二次反应与聚合生产线', hazardLevel:0.65 },
+  { id:'b34', name:'分离纯化车间', type:'production', x:820, y:260, w:80, h:50, zone:'prod_b2', status:'运行中', area:'4000m²', personnel:30, desc:'产品分离与纯化精制', hazardLevel:0.55 },
+  { id:'b35', name:'配料混合车间', type:'production', x:700, y:340, w:80, h:45, zone:'prod_b2', status:'正常', area:'3600m²', personnel:20, desc:'原料配料与混合预处理', hazardLevel:0.50 },
+  { id:'b36', name:'质检包装车间', type:'production', x:820, y:340, w:80, h:45, zone:'prod_b2', status:'正常', area:'3600m²', personnel:18, desc:'成品质量检测与包装入库', hazardLevel:0.30 },
+  { id:'b30', name:'消防水泵房', type:'utility', x:350, y:452, w:60, h:40, zone:'fire_safety', status:'运行中', area:'2400m²', power:'双电源供电', desc:'消防主泵/稳压泵/柴油泵+1800m³消防水池(GB50160 8.3)', hazardLevel:0.25 },
+  { id:'b31', name:'机修间', type:'utility', x:740, y:190, w:75, h:35, zone:'maintenance', status:'正常', area:'2625m²', desc:'设备维修保养与备品备件库(GB50489 5.3)', hazardLevel:0.30 },
+  { id:'b32', name:'绿化隔离带', type:'utility', x:300, y:575, w:370, h:25, zone:'greenbelt', status:'正常', area:'9250m²', desc:'园区南侧安全绿化隔离带(GB50160 4.2.11)', hazardLevel:0.05 },
+  { id:'b30', name:'环境空气质量监测站', type:'utility', x:750, y:570, w:70, h:30, zone:'monitoring', status:'正常', area:'2100m²', personnel:8, desc:'园区环境空气质量监测与预警中心(HJ664)', hazardLevel:0.10 },
 ]
 
 export const facilityById = new Map(facilities.map(facility => [facility.id, facility]))
@@ -153,7 +167,7 @@ export const buildingEntrances = facilities
   })
 
 export const sensorTypes = [
-  { id: 'gas', name: '气体传感器', radius: 30, cost: 1200, color: '#00e5a0' },
+  { id: 'gas', name: '气体传感器', radius: 40, cost: 1200, color: '#00e5a0' },
   { id: 'temp', name: '温度传感器', radius: 20, cost: 800, color: '#38bdf8' },
   { id: 'leak', name: '泄漏传感器', radius: 25, cost: 1500, color: '#ff6b35' },
 ]

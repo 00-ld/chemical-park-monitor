@@ -38,6 +38,8 @@ replay_pid*.log
 omc/
 .claude/
 .omc/
+.codegraph/
+chemical-park-monitor/
 
 # ML models
 *.pt

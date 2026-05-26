@@ -318,8 +318,8 @@
           <button class="tool-btn" :class="{ active: measureMode }" @click="setTool('measure')">
             <i class="fas fa-ruler"></i> 测距
           </button>
-          <button class="tool-btn" @click="clearAllSensor">
-            <i class="fas fa-trash"></i> 清空传感器
+          <button class="tool-btn" :class="{ active: showSensors }" @click="toggleSensors">
+            <i class="fas fa-eye"></i> 显示传感器
           </button>
           <button class="tool-btn" :class="{ active: showCars }" @click="toggleCars" title="显示/隐藏巡检小车">
             <i class="fas fa-truck"></i> 小车
@@ -891,6 +891,28 @@
               <span>{{ manualSensorPlacementPointLabel }}</span>
             </div>
             <div class="control-grid" style="margin-top:10px;">
+              <label class="control-field" style="grid-column:1 / -1;">
+                <span>零点坐标</span>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <input type="text" :value="sensorPlacementState.origin ? `(${sensorPlacementState.origin.x.toFixed(1)}, ${sensorPlacementState.origin.y.toFixed(1)})` : '未设置'" disabled style="flex:1;">
+                  <button class="sensor-btn primary" :class="{ active: sensorPlacementState.pickingOrigin }" @click="toggleOriginPicking" style="white-space:nowrap;">
+                    <i class="fas fa-crosshairs"></i> {{ sensorPlacementState.pickingOrigin ? '选择中...' : (sensorPlacementState.origin ? '重设零点' : '设置零点') }}
+                  </button>
+                </div>
+              </label>
+              <label class="control-field">
+                <span>X 偏移 (m)</span>
+                <input v-model.number="sensorPlacementState.relativeX" type="number" step="0.1" placeholder="0">
+              </label>
+              <label class="control-field">
+                <span>Y 偏移 (m)</span>
+                <input v-model.number="sensorPlacementState.relativeY" type="number" step="0.1" placeholder="0">
+              </label>
+              <label class="control-field" style="grid-column:1 / -1;">
+                <button class="sensor-btn primary" @click="applyRelativeCoordinates" :disabled="!sensorPlacementState.origin" style="width:100%;">
+                  <i class="fas fa-check"></i> 应用坐标
+                </button>
+              </label>
               <label class="control-field">
                 <span>安装高度 (m)</span>
                 <input v-model.number="manualSensorDraft.installationHeight" type="number" min="0.3" max="10" step="0.1">
@@ -929,6 +951,42 @@
               </button>
               <button class="sensor-btn danger" @click="cancelManualSensorPlacement">
                 <i class="fas fa-xmark"></i> 取消
+              </button>
+            </div>
+          </div>
+          <div v-if="manualSensorConfigVisible" class="candidate-detail-card" style="margin-top:10px;">
+            <div class="candidate-detail-head">
+              <span>批量导入传感器</span>
+              <span>{{ batchImportPreview.length }} 个点位</span>
+            </div>
+            <div class="control-grid" style="margin-top:10px;">
+              <label class="control-field" style="grid-column:1 / -1;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                  <span>直接粘贴Excel数据 (X Y 高度)</span>
+                  <button class="sensor-btn" @click="pasteFromClipboard" style="padding:2px 8px;font-size:11px;">
+                    <i class="fas fa-paste"></i> 粘贴
+                  </button>
+                </div>
+                <textarea v-model="batchImportText" rows="6" style="width:100%;background:#0a0f1a;color:#e0e0e0;border:1px solid #2a3a2a;border-radius:6px;padding:8px;font-family:monospace;font-size:12px;resize:vertical;" placeholder="支持格式:&#10;15  10  1.5&#10;23  10  1.5&#10;或: 15,10,1.5&#10;或: 15 10"></textarea>
+              </label>
+              <div style="grid-column:1 / -1;display:flex;gap:8px;align-items:center;">
+                <span style="font-size:11px;color:#888;">默认:</span>
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;">
+                  高度 <input v-model.number="batchDefaultHeight" type="number" min="0.3" max="10" step="0.1" style="width:50px;background:#0a0f1a;color:#e0e0e0;border:1px solid #2a3a2a;border-radius:4px;padding:2px 4px;font-size:11px;"> m
+                </label>
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;">
+                  范围 <input v-model.number="batchDefaultRange" type="number" min="0" max="20" step="0.1" style="width:50px;background:#0a0f1a;color:#e0e0e0;border:1px solid #2a3a2a;border-radius:4px;padding:2px 4px;font-size:11px;"> m
+                </label>
+              </div>
+              <div v-if="batchImportPreview.length > 0" style="grid-column:1 / -1;max-height:120px;overflow-y:auto;background:#0a0f1a;border-radius:6px;padding:6px;font-size:11px;">
+                <div v-for="(item, idx) in batchImportPreview.slice(0, 20)" :key="idx" style="display:flex;justify-content:space-between;padding:2px 0;">
+                  <span style="color:#00e5a0;">{{ item.id }}</span>
+                  <span>({{ item.x.toFixed(1) }}, {{ item.y.toFixed(1) }})</span>
+                </div>
+                <div v-if="batchImportPreview.length > 20" style="color:#888;text-align:center;padding:4px;">... 共 {{ batchImportPreview.length }} 个</div>
+              </div>
+              <button class="sensor-btn primary" @click="executeBatchImport" :disabled="batchImportPreview.length === 0" style="grid-column:1 / -1;width:100%;">
+                <i class="fas fa-upload"></i> 一键导入 {{ batchImportPreview.length }} 个传感器
               </button>
             </div>
           </div>
@@ -1175,6 +1233,7 @@ const showLabels = ref(true)
 const showHeatmap = ref(false)
 const showFlow = ref(false)
 const showEntrances = ref(false)
+const showSensors = ref(true)
 const measureMode = ref(false)
 const activeFilter = ref('all')
 const selectedZone = ref('')
@@ -1511,6 +1570,10 @@ function startWeatherAutoRefresh() {
   setInterval(() => fetchRealtimeWeather(), 30 * 60 * 1000)
 }
 const layoutResult = ref({ totalCost: 0, coverageRate: 0, riskCoverRate: 0, sensorCount: 0 })
+const batchImportText = ref('')
+const batchImportPreview = ref([])
+const batchDefaultHeight = ref(1.5)
+const batchDefaultRange = ref(4)
 const selectedSensor = ref(null)
 const riskStat = ref({ high: 0, mid: 0, low: 0 })
 const diffusionGasOptions = PHASE1_GASES
@@ -1529,13 +1592,17 @@ const leakSourceState = reactive({
 })
 const MANUAL_SENSOR_DEFAULTS = Object.freeze({
   installationHeight: 1.5,
-  effectiveRange: 30,
+  effectiveRange: 20,
   detectionRange: 'CO / 可燃气体 / H2S / O2',
   installRemark: '',
 })
 const sensorPlacementState = reactive({
   picking: false,
+  pickingOrigin: false,
   pendingPoint: null,
+  origin: { x: 70, y: 260 },
+  relativeX: 0,
+  relativeY: 0,
 })
 function createManualSensorDraft() {
   return {
@@ -1691,8 +1758,8 @@ const manualSensorDraftValidation = computed(() => {
   if (hasHeight && (!Number.isFinite(height) || height < 0.3 || height > 10)) {
     return { valid: false, message: '安装高度需在 0.3 ~ 10 m 之间。' }
   }
-  if (hasRange && (!Number.isFinite(range) || range < 5 || range > 100)) {
-    return { valid: false, message: '有效监测范围需在 5 ~ 100 m 之间。' }
+  if (hasRange && (!Number.isFinite(range) || range < 0 || range > 20)) {
+    return { valid: false, message: '有效监测范围需在 0 ~ 20 m 之间。' }
   }
   if (!sensorPlacementState.pendingPoint) {
     return { valid: false, message: '请先点击地图选择传感器安装位置，再确认添加。' }
@@ -1828,6 +1895,7 @@ async function fetchSensorsFromDB() {
     const data = await resp.json()
     if (data.code === 200 && Array.isArray(data.data)) {
       sensors.value = buildActiveSensorSeries(data.data, diffusionFrames.value)
+      render()
     }
   } catch (err) {
     console.warn('从数据库加载传感器失败:', err.message)
@@ -1856,11 +1924,15 @@ async function saveSensorToDB(sensor) {
       })
     })
     const result = await resp.json()
-    if (result.code !== 200) {
+    if (result.code === 200) {
+      return true
+    } else {
       console.warn('保存传感器到数据库失败:', result.message)
+      return false
     }
   } catch (err) {
     console.warn('保存传感器到数据库失败:', err.message)
+    return false
   }
 }
 
@@ -2191,8 +2263,8 @@ function getNormalizedManualSensorDraft() {
     effectiveRange: normalizeManualSensorNumber(
       manualSensorDraft.effectiveRange,
       MANUAL_SENSOR_DEFAULTS.effectiveRange,
-      5,
-      100,
+      0,
+      20,
       0
     ),
     detectionRange: manualSensorDraft.detectionRange?.trim() || MANUAL_SENSOR_DEFAULTS.detectionRange,
@@ -2212,8 +2284,8 @@ function resolveSensorEffectiveRange(sensor, fallbackRadius = MANUAL_SENSOR_DEFA
   return normalizeManualSensorNumber(
     sensor?.effectiveRange,
     fallbackRadius,
-    5,
-    100,
+    0,
+    20,
     0
   )
 }
@@ -2228,6 +2300,105 @@ function resetManualSensorDraft(keepPoint = false) {
   if (!keepPoint) {
     sensorPlacementState.pendingPoint = null
   }
+}
+function toggleOriginPicking() {
+  if (sensorPlacementState.picking) {
+    sensorPlacementState.picking = false
+  }
+  sensorPlacementState.pickingOrigin = !sensorPlacementState.pickingOrigin
+  if (sensorPlacementState.pickingOrigin) {
+    canvasEl.style.cursor = 'crosshair'
+    showToast('请点击地图设置零点位置', 'success')
+  } else {
+    canvasEl.style.cursor = measureMode.value ? 'crosshair' : 'grab'
+  }
+}
+function captureOriginPoint(point) {
+  sensorPlacementState.origin = normalizeMapPoint(point)
+  sensorPlacementState.pickingOrigin = false
+  canvasEl.style.cursor = measureMode.value ? 'crosshair' : 'grab'
+  showToast(`零点已设置: (${sensorPlacementState.origin.x.toFixed(1)}, ${sensorPlacementState.origin.y.toFixed(1)})`, 'success')
+}
+function applyRelativeCoordinates() {
+  if (!sensorPlacementState.origin) {
+    showToast('请先设置零点位置', 'warn')
+    return
+  }
+  const x = sensorPlacementState.origin.x + (sensorPlacementState.relativeX || 0)
+  const y = sensorPlacementState.origin.y + (sensorPlacementState.relativeY || 0)
+  sensorPlacementState.pendingPoint = normalizeMapPoint({ x, y })
+  manualSensorConfigVisible.value = true
+  showToast(`已应用坐标: (${x.toFixed(1)}, ${y.toFixed(1)})`, 'success')
+}
+function parseBatchImport() {
+  if (!sensorPlacementState.origin) {
+    showToast('请先设置零点位置', 'warn')
+    return
+  }
+  const lines = batchImportText.value.split('\n').filter(line => line.trim())
+  const preview = []
+  let sensorIndex = sensors.value.length + 1
+  for (const line of lines) {
+    // 移除"m"后缀，支持多种分隔符
+    const cleaned = line.replace(/m/gi, ' ')
+    const parts = cleaned.split(/[\t,\s]+/).filter(p => p.trim() !== '')
+    if (parts.length < 2) continue
+    const nums = parts.map(p => parseFloat(p)).filter(n => !isNaN(n))
+    if (nums.length < 2) continue
+    const xRel = nums[0]
+    const yRel = nums[1]
+    const height = nums.length >= 3 ? nums[2] : batchDefaultHeight.value
+    const mapX = sensorPlacementState.origin.x + xRel
+    const mapY = sensorPlacementState.origin.y + yRel
+    preview.push({
+      id: `B-${String(sensorIndex++).padStart(2, '0')}`,
+      xRel, yRel,
+      x: mapX, y: mapY,
+      height: isNaN(height) ? batchDefaultHeight.value : height,
+      effectiveRange: batchDefaultRange.value,
+    })
+  }
+  batchImportPreview.value = preview
+  showToast(`解析完成，共 ${preview.length} 个点位`, 'success')
+}
+async function pasteFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText()
+    if (text && text.trim()) {
+      batchImportText.value = text
+      parseBatchImport()
+    } else {
+      showToast('剪贴板为空，请先从Excel复制数据', 'warn')
+    }
+  } catch (e) {
+    showToast('请手动粘贴: Ctrl+V', 'warn')
+  }
+}
+async function executeBatchImport() {
+  if (batchImportPreview.value.length === 0) return
+  let count = 0
+  for (const item of batchImportPreview.value) {
+    const sensor = {
+      id: item.id,
+      x: item.x,
+      y: item.y,
+      installationHeight: item.height,
+      effectiveRange: item.effectiveRange,
+      detectionRange: 'CO/可燃气体/H2S/O2',
+      installRemark: `批量导入: 相对坐标(${item.xRel},${item.yRel})`,
+      priority: 2,
+      risk: 0.5,
+      type: 'gas',
+      mode: 'auto',
+      lastSampleTime: null,
+    }
+    const success = await saveSensorToDB(sensor)
+    if (success) count++
+  }
+  await fetchSensorsFromDB()
+  batchImportText.value = ''
+  batchImportPreview.value = []
+  showToast(`批量导入完成，成功 ${count} 个传感器`, 'success')
 }
 function startManualSensorPicking() {
   if (leakSourceState.picking) {
@@ -2247,6 +2418,7 @@ function captureManualSensorPoint(point) {
 }
 function cancelManualSensorPlacement() {
   sensorPlacementState.picking = false
+  sensorPlacementState.pickingOrigin = false
   manualSensorConfigVisible.value = false
   resetManualSensorDraft()
   canvasEl.style.cursor = measureMode.value ? 'crosshair' : 'grab'
@@ -2396,6 +2568,9 @@ function applyLeakSourcePoint(point, mode, options = {}) {
 function toggleLeakSourcePicking() {
   if (sensorPlacementState.picking) {
     sensorPlacementState.picking = false
+  }
+  if (sensorPlacementState.pickingOrigin) {
+    sensorPlacementState.pickingOrigin = false
   }
   leakSourceState.picking = !leakSourceState.picking
   if (leakSourceState.picking) {
@@ -3288,6 +3463,10 @@ function onCanvasMouseMove(e) {
     canvasEl.style.cursor = 'crosshair'
     return
   }
+  if (sensorPlacementState.pickingOrigin) {
+    canvasEl.style.cursor = 'crosshair'
+    return
+  }
   const entranceHit = entranceHitTest(w.x, w.y)
   const sensorHit = entranceHit ? null : sensorHitTest(w.x, w.y)
   const candidateHit = entranceHit || sensorHit ? null : candidateRegionHitTest(w.x, w.y)
@@ -3317,6 +3496,12 @@ function onCanvasMouseUp(e) {
       }
       if (sensorPlacementState.picking) {
         captureManualSensorPoint(w)
+        viewState.dragging = false
+        isDragging.value = false
+        return
+      }
+      if (sensorPlacementState.pickingOrigin) {
+        captureOriginPoint(w)
         viewState.dragging = false
         isDragging.value = false
         return
@@ -3471,6 +3656,11 @@ function toggleEntrances() {
   canvasEl.style.cursor = showEntrances.value && hoveredEntrance.value ? 'pointer' : (measureMode.value ? 'crosshair' : 'grab')
   render()
   showToast(showEntrances.value ? '出入口标记已显示' : '出入口标记已隐藏', 'success')
+}
+function toggleSensors() {
+  showSensors.value = !showSensors.value
+  render()
+  showToast(showSensors.value ? '传感器已显示' : '传感器已隐藏', 'success')
 }
 function toggleLabels() {
   showLabels.value = !showLabels.value
@@ -4864,13 +5054,11 @@ function drawRiskGrid() {
   })
 }
 function drawSensors() {
+  if (!showSensors.value) return
   const ss = Math.max(0.1, viewState.scale || 1)
-  const gas = diffusionMeta.value.gas || getGasById(diffusionForm.gasId)
   sensors.value.forEach(s => {
-    const type = sensorTypes.find(t => t.id === s.type)
+    const type = sensorTypes.find(t => t.id === s.type) || sensorTypes[0]
     const r = resolveSensorEffectiveRange(s, type?.radius || MANUAL_SENSOR_DEFAULTS.effectiveRange)
-    const currentConcentration = getSensorCurrentConcentration(s)
-    const alarmLevel = getSensorAlarmLevel(currentConcentration, gas)
     ctx.fillStyle = `rgba(${hexToRgb(type.color)}, 0.12)`
     ctx.beginPath()
     ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
@@ -4893,24 +5081,6 @@ function drawSensors() {
     ctx.beginPath()
     ctx.arc(s.x, s.y, 2.5 / ss, 0, Math.PI * 2)
     ctx.fill()
-    if (alarmLevel !== 'normal') {
-      const alarmColor = alarmLevel === 'danger' ? '#ef4444' : '#f59e0b'
-      ctx.strokeStyle = alarmColor
-      ctx.lineWidth = 1 / ss
-      ctx.beginPath()
-      ctx.arc(s.x, s.y, 6 / ss, 0, Math.PI * 2)
-      ctx.stroke()
-    }
-    if (showLabels.value) {
-      const label = `${currentConcentration.toFixed(1)} ppm`
-      const pillWidth = Math.max(34, ctx.measureText(label).width + 10)
-      ctx.fillStyle = '#0a0f1a'
-      ctx.fillRect(s.x - pillWidth / 2, s.y - 24, pillWidth, 12)
-      ctx.fillStyle = alarmLevel === 'danger' ? '#ef4444' : alarmLevel === 'warning' ? '#f59e0b' : type.color
-      ctx.font = '8px "Noto Sans SC"'
-      ctx.textAlign = 'center'
-      ctx.fillText(label, s.x, s.y - 22)
-    }
   })
 }
 function sensorHitTest(wx, wy) {
@@ -4966,6 +5136,12 @@ function addManualSensor(){
     showToast('已取消手动传感器选点', 'warn')
     return
   }
+  if (sensorPlacementState.pickingOrigin) {
+    sensorPlacementState.pickingOrigin = false
+    canvasEl.style.cursor = measureMode.value ? 'crosshair' : 'grab'
+    showToast('已取消零点选取', 'warn')
+    return
+  }
   startManualSensorPicking()
 }
 function clearAllSensor(){
@@ -4974,7 +5150,11 @@ function clearAllSensor(){
   sensors.value = []
   selectedSensor.value = null
   sensorPlacementState.picking = false
+  sensorPlacementState.pickingOrigin = false
   sensorPlacementState.pendingPoint = null
+  sensorPlacementState.origin = null
+  sensorPlacementState.relativeX = 0
+  sensorPlacementState.relativeY = 0
   manualSensorConfigVisible.value = false
   resetManualSensorDraft()
   syncSensorEditorState(null)
