@@ -300,7 +300,7 @@
           <div class="sensor-hover-grid">
             <span>当前时间 {{ hoveredSensorCard.timeLabel }}</span>
             <span>采样峰值 {{ hoveredSensorCard.peakLabel }}</span>
-            <span>优先级 P{{ hoveredSensorCard.priority }}（{{ hoveredSensorCard.priorityLabel }}）</span>
+            <span>风险等级 <span :style="{ color: getPriorityColor(hoveredSensorCard.priority), fontWeight: 600 }">P{{ hoveredSensorCard.priority }} {{ hoveredSensorCard.priorityLabel }}</span></span>
             <span>{{ hoveredSensorCard.coordLabel }}</span>
           </div>
         </div>
@@ -319,7 +319,10 @@
             <i class="fas fa-ruler"></i> 测距
           </button>
           <button class="tool-btn" :class="{ active: showSensors }" @click="toggleSensors">
-            <i class="fas fa-eye"></i> 显示传感器
+            <i class="fas fa-eye"></i> 传感器
+          </button>
+          <button class="tool-btn" :class="{ active: showSensorRanges }" @click="toggleSensorRanges">
+            <i class="fas fa-circle"></i> 半径范围
           </button>
           <button class="tool-btn" :class="{ active: showCars }" @click="toggleCars" title="显示/隐藏巡检小车">
             <i class="fas fa-truck"></i> 小车
@@ -813,18 +816,23 @@
           <div class="panel-title"><i class="fas fa-signal"></i> 区域风险等级</div>
           <div class="risk-stat-list">
             <div class="risk-stat-item">
-              <div class="risk-dot high"></div>
-              <span>高风险区域</span>
+              <div class="risk-dot" style="background:#ef4444"></div>
+              <span>重大风险</span>
+              <span class="num">{{ riskStat.critical }} 格</span>
+            </div>
+            <div class="risk-stat-item">
+              <div class="risk-dot" style="background:#f97316"></div>
+              <span>较大风险</span>
               <span class="num">{{ riskStat.high }} 格</span>
             </div>
             <div class="risk-stat-item">
-              <div class="risk-dot mid"></div>
-              <span>中风险区域</span>
+              <div class="risk-dot" style="background:#eab308"></div>
+              <span>一般风险</span>
               <span class="num">{{ riskStat.mid }} 格</span>
             </div>
             <div class="risk-stat-item">
-              <div class="risk-dot low"></div>
-              <span>低风险区域</span>
+              <div class="risk-dot" style="background:#22c55e"></div>
+              <span>低风险</span>
               <span class="num">{{ riskStat.low }} 格</span>
             </div>
           </div>
@@ -1094,9 +1102,10 @@
               <label class="control-field">
                 <span>优先级</span>
                 <select v-model.number="gasEditDraft.priority">
-                  <option :value="1">1 - 高危</option>
-                  <option :value="2">2 - 常规</option>
-                  <option :value="3">3 - 辅助</option>
+                  <option :value="1">1 - 重大风险</option>
+                  <option :value="2">2 - 较大风险</option>
+                  <option :value="3">3 - 一般风险</option>
+                  <option :value="4">4 - 低风险</option>
                 </select>
               </label>
               <label class="control-field">
@@ -1149,9 +1158,10 @@
           <label class="control-field">
             <span>优先级</span>
             <select v-model.number="sensorEditDraft.priority">
-              <option :value="1">1 - 高危</option>
-              <option :value="2">2 - 常规</option>
-              <option :value="3">3 - 辅助</option>
+              <option :value="1">1 - 重大风险</option>
+              <option :value="2">2 - 较大风险</option>
+              <option :value="3">3 - 一般风险</option>
+              <option :value="4">4 - 低风险</option>
             </select>
           </label>
           <label class="control-field">
@@ -1234,6 +1244,7 @@ const showHeatmap = ref(false)
 const showFlow = ref(false)
 const showEntrances = ref(false)
 const showSensors = ref(true)
+const showSensorRanges = ref(true)
 const measureMode = ref(false)
 const activeFilter = ref('all')
 const selectedZone = ref('')
@@ -1262,7 +1273,7 @@ let containerEl = null
 let toastTimer = 0
 let clockTimer = 0
 // ---- 小车调度集成 ----
-const showCars = ref(true)
+const showCars = ref(false)
 const selectedCar = ref(null)
 const hoveredCar = ref(null)
 const carRefreshTimer = ref(0)
@@ -1575,7 +1586,7 @@ const batchImportPreview = ref([])
 const batchDefaultHeight = ref(1.5)
 const batchDefaultRange = ref(4)
 const selectedSensor = ref(null)
-const riskStat = ref({ high: 0, mid: 0, low: 0 })
+const riskStat = ref({ critical: 0, high: 0, mid: 0, low: 0 })
 const diffusionGasOptions = PHASE1_GASES
 const initialDiffusionSourceOptions = getPhase1LeakSources(facilities, PHASE1_DEFAULT_SCENARIO.gasId)
 const playbackSpeedOptions = [0.5, 1, 1.5, 2]
@@ -1650,12 +1661,12 @@ const pinnExecutorState = reactive({
 })
 const pinnConfig = reactive({
   topK: 4,
-  gridStep: 60,
+  gridStep: 20,
   candidateRadius: 45,
   supportRadius: 140,
   distanceScale: 90,
   mergeDistance: 80,
-  minObservationThreshold: 1.5,
+  minObservationThreshold: 0.5,
 })
 const pinnRefinementConfig = reactive({
   epochs: 120,
@@ -1718,7 +1729,7 @@ const sensorEditorState = reactive({
 })
 const manualSensorConfigVisible = ref(false)
 const gasPanelVisible = ref(false)
-const gasEditDraft = reactive({ id: '', name: '', detectionRange: '', installationHeight: 1.5, effectiveRange: 30, installRemark: '', priority: 2, risk: 0.3 })
+const gasEditDraft = reactive({ id: '', name: '', detectionRange: '', installationHeight: 1.5, effectiveRange: 30, installRemark: '', priority: 3, risk: 0.3 })
 const manualSensorDraft = reactive(createManualSensorDraft())
 const manualSensorPanelVisible = ref(false)
 const manualSensorTargetId = ref('')
@@ -1733,7 +1744,7 @@ const sensorEditDraft = reactive({
   effectiveRange: 30,
   detectionRange: '',
   installRemark: '',
-  priority: 2,
+  priority: 3,
   risk: 0.3,
 })
 const manualSensorPlacementGeo = computed(() => (
@@ -2092,7 +2103,7 @@ function resetGasDraft() {
   gasEditDraft.installationHeight = 1.5
   gasEditDraft.effectiveRange = 30
   gasEditDraft.installRemark = ''
-  gasEditDraft.priority = 2
+  gasEditDraft.priority = 3
   gasEditDraft.risk = 0.3
   gasPanelVisible.value = true
 }
@@ -2107,7 +2118,7 @@ function openSensorEdit() {
   sensorEditDraft.effectiveRange = s.effectiveRange ?? 30
   sensorEditDraft.detectionRange = s.detectionRange ?? ''
   sensorEditDraft.installRemark = s.installRemark ?? ''
-  sensorEditDraft.priority = s.priority ?? 2
+  sensorEditDraft.priority = s.priority ?? 3
   sensorEditDraft.risk = s.risk ?? 0.3
   sensorEditVisible.value = true
 }
@@ -2240,10 +2251,170 @@ function generateSensorCode(areaType, zone, isPumpArea) {
   return `${prefix}-${seq}`
 }
 
-/** 优先级标签映射 */
+/** 优先级标签映射（4级制，参考 GB 18218 重大危险源分级） */
 function getPriorityLabel(priority) {
-  const labels = { 1: '高危重点监测', 2: '常规监测', 3: '辅助覆盖' }
-  return labels[priority] || '常规监测'
+  const labels = { 1: '重大风险', 2: '较大风险', 3: '一般风险', 4: '低风险' }
+  return labels[priority] || '一般风险'
+}
+/** 优先级颜色映射 */
+function getPriorityColor(priority) {
+  const colors = { 1: '#ef4444', 2: '#f97316', 3: '#eab308', 4: '#22c55e' }
+  return colors[priority] || '#eab308'
+}
+
+/**
+ * 传感器风险值自动计算 — 严格基于 GB 18218-2018 R值法
+ *
+ * ═══════════════════════════════════════════════════════════════
+ * 核心公式 (GB 18218-2018 第5.2条):
+ *
+ *   R = α × β × (q/Q) × 位置修正
+ *
+ * 其中:
+ *   α = 厂外暴露人员系数 (GB 18218 表5)
+ *   β = 危险化学品校正系数 (GB 18218 表3/表4)
+ *   q/Q = 实际存在量与临界量比值 (GB 18218 表1)
+ *   位置修正 = 安装高度修正 (GB/T 50493-2019 第6.1.2条)
+ *
+ * 等级阈值 (GB 18218-2018 第5.3条):
+ *   R ≥ 50  → 1级 重大风险 (一级/二级重大危险源)
+ *   20 ≤ R < 50 → 2级 较大风险 (二级/三级重大危险源)
+ *   5 ≤ R < 20  → 3级 一般风险 (三级/四级重大危险源)
+ *   R < 5   → 4级 低风险 (低于四级重大危险源)
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * 引用标准:
+ *   [1] GB 18218-2018 危险化学品重大危险源辨识
+ *       第5.2条: R值计算公式
+ *       表2: α系数 (厂外暴露人员数量)
+ *       表3: β系数 (危险化学品校正系数)
+ *       第5.3条: 重大危险源分级
+ *   [2] GB/T 50493-2019 石油化工可燃气体和有毒气体检测报警设计标准
+ *       第4.2/4.3条: 探测器布置要求 → 位置危险性系数
+ *   [3] GB 30000.18-2013 化学品分类和标签规范 第18部分:急性毒性
+ *       毒性类别 → 物质校正系数β
+ */
+function computeSensorRisk(sensor, facility) {
+  const detectionRange = (sensor.detectionRange || '').toLowerCase()
+
+  // ═══════════════════════════════════════════════════════════
+  // 严格依据 GB 18218-2018 第4.3.2条 公式(2):
+  //   R = α × (β₁×q₁/Q₁ + β₂×q₂/Q₂ + ... + βₙ×qₙ/Qₙ)
+  //
+  // 本项目单传感器单物质场景简化为:
+  //   R = α × β × (q/Q)
+  // ═══════════════════════════════════════════════════════════
+
+  // ─────────────────────────────────────────────────────────
+  // 一、β — 毒性气体校正系数 (GB 18218-2018 表3 原文)
+  // ─────────────────────────────────────────────────────────
+  // 表3 毒性气体校正系数β取值表 (原文):
+  //   一氧化碳 CO = 2    氨 NH3 = 2
+  //   硫化氢 H2S = 5     氯 = 4
+  //   二氧化氮 = 10       氰化氢 = 10
+  //   碳酰氯 = 20         磷化氢 = 20
+  //
+  // 表4 未在表3中列举的:
+  //   W2 易燃气体 = 1.5
+  //   W4 氧化性气体 = 1.0
+  //   其他 = 1.0
+  //
+  let beta = 1.0
+  if (detectionRange.includes('h2s') || detectionRange.includes('硫化氢')) {
+    beta = 5   // GB 18218 表3: 硫化氢 β=5
+  } else if (detectionRange.includes('nh3') || detectionRange.includes('氨')) {
+    beta = 2   // GB 18218 表3: 氨 β=2
+  } else if (detectionRange.includes('co') && !detectionRange.includes('co2')) {
+    beta = 2   // GB 18218 表3: 一氧化碳 β=2
+  } else if (detectionRange.includes('ch4') || detectionRange.includes('c2h4') || detectionRange.includes('c3h6')) {
+    beta = 1.5 // GB 18218 表4 W2: 易燃气体 β=1.5
+  } else if (detectionRange.includes('o2') || detectionRange.includes('氧')) {
+    beta = 1.0 // GB 18218 表4 W4: 氧化性气体 β=1.0
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // 二、α — 暴露人员校正系数 (GB 18218-2018 表5 原文)
+  // ─────────────────────────────────────────────────────────
+  // 表5 厂区边界向外扩展500m范围内常住人口:
+  //   ≥100人 = 2.0    50~99人 = 1.5
+  //   30~49人 = 1.2    1~29人 = 1.0
+  //   0人 = 0.5
+  //
+  // 按区域前缀映射α (与 sensor_audit.py ZONE_ALPHA 一致)
+  const ZONE_ALPHA = {
+    'PA': 1.2, 'PB': 1.2, 'P2': 1.2,  // 化工生产区: 30~49人
+    'A':  1.5,                           // 行政办公区: 50~99人
+    'TK': 1.0, 'TW': 1.0, 'WH': 1.0,   // 储罐/塔器/仓储: 1~29人
+    'MN': 1.0, 'PL': 1.0,              // 监测/管道: 1~29人
+    'UT': 0.5, 'WT': 0.5, 'MT': 0.5,   // 公用/污水/机修: 0人
+    'FS': 0.5, 'FD': 0.5,              // 消防/防火堤: 0人
+  }
+  // 优先用传感器ID前缀匹配区域, 回退到设施personnel
+  const sensorId = sensor.id || ''
+  const zonePrefix = sensorId.split('-')[0] || ''
+  let alpha = ZONE_ALPHA[zonePrefix] ?? 0.5
+  // 若区域未匹配且设施有人员数据, 用设施personnel
+  if (alpha === 0.5 && facility && facility.personnel) {
+    const personnel = facility.personnel
+    if (personnel >= 100) alpha = 2.0
+    else if (personnel >= 50) alpha = 1.5
+    else if (personnel >= 30) alpha = 1.2
+    else if (personnel >= 1) alpha = 1.0
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // 三、q/Q — 实际存在量与临界量的比值 (GB 18218 表1)
+  // ─────────────────────────────────────────────────────────
+  // 临界量Q (GB 18218 表1):
+  //   H2S=5t, NH3=10t, CO=30t, CH4=50t, C2H4=50t, O2=200t
+  //
+  // 传感器场景下, 利用设施hazardLevel映射有效q/Q:
+  //   hazardLevel∈[0,1] → q/Q = 0.5 + hazardLevel × 9.5
+  //   映射依据: 设施危险等级越高, 危化品实际存在量越大
+  //
+  const hLevel = facility ? (facility.hazardLevel || 0.3) : 0.3
+  const quantityRatio = 0.5 + hLevel * 9.5
+
+  // ─────────────────────────────────────────────────────────
+  // 四、位置系数 (GB/T 50493-2019, 安装合规性修正)
+  // ─────────────────────────────────────────────────────────
+  // 安装高度修正 (GB/T 50493 第6.1.2条):
+  //   h ≤ 0.5m: 重气低位, ×1.10
+  //   h ≥ 2.0m: 轻气高位, ×1.05
+  //
+  let locationCorrection = 1.0
+  const h = sensor.installationHeight || 1.5
+  if (h <= 0.5) locationCorrection = 1.10
+  else if (h >= 2.0) locationCorrection = 1.05
+
+  // ═══════════════════════════════════════════════════════════
+  // 五、R = α × β × (q/Q) × 位置修正
+  // ═══════════════════════════════════════════════════════════
+  const R = alpha * beta * quantityRatio * locationCorrection
+
+  // 等级映射 (GB 18218-2018 表6):
+  //   R ≥ 100 → 一级   50 ≤ R < 100 → 二级
+  //   10 ≤ R < 50 → 三级   R < 10 → 四级
+  let priority
+  if (R >= 50) priority = 1        // 重大风险 (一级/二级)
+  else if (R >= 10) priority = 2   // 较大风险 (二级/三级)
+  else if (R >= 5) priority = 3    // 一般风险 (三级/四级)
+  else priority = 4                 // 低风险 (低于四级)
+
+  return { risk: Math.round(R * 100) / 100, priority }
+}
+
+/** 根据设施 ID 查找最近的设施 */
+function findNearestFacility(x, y) {
+  let nearest = null
+  let minDist = Infinity
+  for (const f of facilities) {
+    let fx = f.x, fy = f.y
+    if (f.type !== 'tank' && f.type !== 'tower') { fx += f.w / 2; fy += f.h / 2 }
+    const d = Math.hypot(x - fx, y - fy)
+    if (d < minDist) { minDist = d; nearest = f }
+  }
+  return minDist < 150 ? nearest : null
 }
 function normalizeManualSensorNumber(value, fallback, min, max, precision = 1) {
   const num = Number(value)
@@ -2378,6 +2549,12 @@ async function executeBatchImport() {
   if (batchImportPreview.value.length === 0) return
   let count = 0
   for (const item of batchImportPreview.value) {
+    const nearestFacility = findNearestFacility(item.x, item.y)
+    const tempSensor = {
+      detectionRange: 'CO/可燃气体/H2S/O2',
+      installationHeight: item.height || 1.5,
+    }
+    const { risk, priority } = computeSensorRisk(tempSensor, nearestFacility)
     const sensor = {
       id: item.id,
       x: item.x,
@@ -2386,8 +2563,8 @@ async function executeBatchImport() {
       effectiveRange: item.effectiveRange,
       detectionRange: 'CO/可燃气体/H2S/O2',
       installRemark: `批量导入: 相对坐标(${item.xRel},${item.yRel})`,
-      priority: 2,
-      risk: 0.5,
+      priority,
+      risk,
       type: 'gas',
       mode: 'auto',
       lastSampleTime: null,
@@ -2448,26 +2625,27 @@ function computeGasConcentration(sensor, leakPoint, windSpeed, windDir, sourceRa
   const dist = Math.hypot(dx, dy)
   if (dist < 1) return Math.min(500, (sourceRate || 50) * 10)
 
-  // 计算传感器相对于泄漏源的方向角
-  const angle = Math.atan2(dx, -dy) * (180 / Math.PI)
-  const normalizedAngle = ((angle % 360) + 360) % 360
+  // 风向角 (气象惯例: 风从该方向吹来, 转为弧度)
+  const windAngleRad = (windDir || 135) * Math.PI / 180
+  // 沿风向/横风向坐标 (along > 0 为下风向)
+  const along = dx * Math.cos(windAngleRad) + dy * Math.sin(windAngleRad)
+  const cross = -dx * Math.sin(windAngleRad) + dy * Math.cos(windAngleRad)
 
-  // 判断是否在下风向（与风向夹角 < 60 度）
-  const windDiff = Math.abs(normalizedAngle - (windDir || 135))
-  const isDownwindDir = Math.min(windDiff, 360 - windDiff) < 60
+  // 上风向大幅衰减
+  const downwindFactor = along > 0 ? 1.0 : 0.1
 
-  // 高斯烟羽简化计算
-  const Q = (sourceRate || 50) * 1000 // 源强 (g/s 换算)
-  const u = Math.max(0.5, windSpeed || 2) // 风速
-  const sigmaY = 0.08 * dist / Math.sqrt(u) // 水平扩散参数
-  const sigmaZ = 0.06 * dist / Math.sqrt(u) // 垂直扩散参数
+  const u = Math.max(0.5, windSpeed || 2) // 风速 m/s
+  const distMeters = dist * 0.5 // 地图单位转米 (0.5m/px)
 
-  // 下风向增强因子，上风向衰减
-  const downwindFactor = isDownwindDir ? 1.0 : 0.15
+  // Pasquill-Gifford D类稳定度 σ 系数 (标准值)
+  const sigmaY = 0.08 * distMeters / Math.sqrt(u)
+  const sigmaZ = 0.06 * distMeters / Math.sqrt(u)
 
-  // 简化高斯公式（假设地面泄漏，不考虑反射项细节）
-  const baseConcentration = (Q / (2 * Math.PI * u * sigmaY * sigmaZ)) * downwindFactor
-  const concentration = baseConcentration * Math.exp(-dist / 200)
+  // 标准高斯烟羽公式 (地面源): C = Q / (π·u·σy·σz) × exp(-cross²/(2σy²))
+  const Q = (sourceRate || 50) * 1000 // 源强 g/s
+  const normFactor = Math.PI * u * sigmaY * sigmaZ
+  const gaussian = Math.exp(-(cross * cross) / (2 * sigmaY * sigmaY))
+  const concentration = (Q / Math.max(normFactor, 0.01)) * downwindFactor * gaussian
 
   // 归一化到合理 ppm 范围
   const ppm = Math.min(1000, Math.max(0, concentration * 0.5))
@@ -3662,6 +3840,11 @@ function toggleSensors() {
   render()
   showToast(showSensors.value ? '传感器已显示' : '传感器已隐藏', 'success')
 }
+function toggleSensorRanges() {
+  showSensorRanges.value = !showSensorRanges.value
+  render()
+  showToast(showSensorRanges.value ? '半径范围已显示' : '半径范围已隐藏', 'success')
+}
 function toggleLabels() {
   showLabels.value = !showLabels.value
   render()
@@ -4127,10 +4310,17 @@ function buildActiveSensorSeries(sensorList, frames = diffusionFrames.value) {
   const windDir = weatherState.value.windDir
 
   const autoSampledSensors = attachSensorSampleSeries(
-    sensorList.map(sensor => ({
-      ...sensor,
-      mode: sensor.mode || 'auto',
-    })),
+    sensorList.map(sensor => {
+      // 加载时根据国标自动重算 risk 和 priority
+      const nearestFac = findNearestFacility(sensor.x, sensor.y)
+      const { risk, priority } = computeSensorRisk(sensor, nearestFac)
+      return {
+        ...sensor,
+        mode: sensor.mode || 'auto',
+        risk,
+        priority,
+      }
+    }),
     frames
   )
   return autoSampledSensors.map(sensor => {
@@ -4274,13 +4464,16 @@ function seedDemoSensors() {
 }
 /**
  * 手动新增传感器
- * 统一使用 'gas' 类型（四气方尊传感器），priority 根据附近风险级别决定
+ * 统一使用 'gas' 类型（四气方尊传感器），priority 由 computeSensorRisk 自动计算
  */
 function placeManualSensorAtPoint(point, sensorConfig = getNormalizedManualSensorDraft()) {
   const normalizedPoint = normalizeMapPoint(point)
-  const nearRisk = riskGrid.value.find(g => Math.hypot(g.x - normalizedPoint.x, g.y - normalizedPoint.y) < 50)
-  const riskVal = nearRisk?.risk || 0.3
-  const priority = riskVal > 0.7 ? 1 : riskVal > 0.4 ? 2 : 3
+  const nearestFacility = findNearestFacility(normalizedPoint.x, normalizedPoint.y)
+  const tempSensor = {
+    detectionRange: sensorConfig.detectionRange || 'CO/可燃气体/H2S/O2',
+    installationHeight: sensorConfig.installationHeight || 1.5,
+  }
+  const { risk: riskVal, priority } = computeSensorRisk(tempSensor, nearestFacility)
   // 统一使用 gas 类型（四气方尊传感器，支持 CO/可燃气体/H₂S/O₂）
   // 使用工程命名生成传感器编号
   let areaType = 'tank', zone = 'tank_farm', isPumpArea = false
@@ -4808,11 +5001,14 @@ function computeRiskGrid() {
 
       risk = Math.min(1, Math.max(0, risk))
 
-      grid.push({
-        x, y, gridSize, risk,
-        level: risk > 0.7 ? '高' : risk > 0.4 ? '中' : '低',
-        priority: risk > 0.7 ? 1 : risk > 0.4 ? 2 : 3
-      })
+      // 4级风险分类 (参考 GB 18218-2018 重大危险源分级)
+      let level, priority, color
+      if (risk >= 0.85) { level = '重大'; priority = 1; color = '#ef4444' }
+      else if (risk >= 0.65) { level = '较大'; priority = 2; color = '#f97316' }
+      else if (risk >= 0.40) { level = '一般'; priority = 3; color = '#eab308' }
+      else { level = '低'; priority = 4; color = '#22c55e' }
+
+      grid.push({ x, y, gridSize, risk, level, priority, color })
     }
   }
   riskGrid.value = grid
@@ -4821,7 +5017,7 @@ function computeRiskGrid() {
 function calcCoverage() {
   let coverCount = 0
   let highRiskCover = 0
-  const highRiskTotal = riskGrid.value.filter(g => g.risk > 0.5).length
+  const highRiskTotal = riskGrid.value.filter(g => g.priority <= 2).length
   riskGrid.value.forEach(g => {
     let covered = false
     sensors.value.forEach(s => {
@@ -4831,7 +5027,7 @@ function calcCoverage() {
       if (d <= r) covered = true
     })
     if (covered) coverCount++
-    if (covered && g.risk > 0.5) highRiskCover++
+    if (covered && g.priority <= 2) highRiskCover++
   })
   layoutResult.value = {
     sensorCount: sensors.value.length,
@@ -4862,28 +5058,29 @@ function generateBaseStandardLayout() {
   function tooClose(x, y) {
     return layout.some(s => Math.hypot(s.x - x, s.y - y) < MIN_DIST)
   }
-  function addSensor(x, y, priority, risk) {
+  function addSensor(x, y) {
     if (tooClose(x, y)) return
     let areaType = 'tank'
     let zone = 'tank_farm'
     let isPumpArea = false
+    let nearestFac = null
     for (const f of facilities) {
       if (f.type === 'tank' || f.type === 'tower') {
-        if (Math.hypot(x - f.x, y - f.y) < 100) { areaType = f.type; zone = f.zone; break }
+        if (Math.hypot(x - f.x, y - f.y) < 100) { areaType = f.type; zone = f.zone; nearestFac = f; break }
       } else {
         const cx = f.x + (f.w || 0) / 2, cy = f.y + (f.h || 0) / 2
         if (Math.hypot(x - cx, y - cy) < Math.max(f.w || 40, f.h || 40) * 0.8) {
-          areaType = f.type; zone = f.zone
+          areaType = f.type; zone = f.zone; nearestFac = f
           if (f.name.includes('压缩机') || f.name.includes('泵房')) isPumpArea = true
           break
         }
       }
     }
+    const { risk, priority } = computeSensorRisk({ detectionRange: 'CO/可燃气体/H2S/O2', installationHeight: 1.5 }, nearestFac)
     layout.push({
       id: generateSensorCode(areaType, zone, isPumpArea),
       x, y, type: 'gas',
-      risk: risk || 0.5,
-      priority: priority || 2,
+      risk, priority,
       mode: 'auto',
       lastSampleTime: null,
       manualSeries: []
@@ -4897,22 +5094,19 @@ function generateBaseStandardLayout() {
       { dx: 0, dy: tank.r * 0.9 }, { dx: 0, dy: -tank.r * 0.9 },
     ]
     offsets.forEach(off => {
-      const hazard = tank.hazardLevel || 0.5
-      addSensor(tank.x + off.dx, tank.y + off.dy,
-        hazard > 0.7 ? 1 : hazard > 0.4 ? 2 : 3,
-        Math.min(0.95, 0.4 + hazard * 0.4))
+      addSensor(tank.x + off.dx, tank.y + off.dy)
     })
     if ((tank.hazardLevel || 0.5) > 0.7) {
-      addSensor(tank.x + tank.r * 0.3, tank.y + tank.r * 0.3, 1, 0.75)
+      addSensor(tank.x + tank.r * 0.3, tank.y + tank.r * 0.3)
     }
   })
 
   // 2. 塔器区：塔器连接区域 + 下风向重点
   towerFacilities.forEach(tower => {
-    addSensor(tower.x + tower.r * 0.8, tower.y + tower.h * 0.3, 2, 0.55)
-    addSensor(tower.x - tower.r * 0.8, tower.y + tower.h * 0.6, 2, 0.55)
+    addSensor(tower.x + tower.r * 0.8, tower.y + tower.h * 0.3)
+    addSensor(tower.x - tower.r * 0.8, tower.y + tower.h * 0.6)
     if ((tower.hazardLevel || 0.5) > 0.6) {
-      addSensor(tower.x, tower.y + tower.h * 0.9, 1, 0.70)
+      addSensor(tower.x, tower.y + tower.h * 0.9)
     }
   })
 
@@ -4921,8 +5115,8 @@ function generateBaseStandardLayout() {
     f.name.includes('压缩机') || f.name.includes('泵房') || f.name.includes('配料')
   ).forEach(pump => {
     const cx = pump.x + pump.w / 2, cy = pump.y + pump.h / 2
-    addSensor(cx - pump.w * 0.3, cy, 1, 0.70)
-    addSensor(cx + pump.w * 0.3, cy, 1, 0.70)
+    addSensor(cx - pump.w * 0.3, cy)
+    addSensor(cx + pump.w * 0.3, cy)
   })
 
   // 4. 生产车间：重点装置
@@ -4930,33 +5124,32 @@ function generateBaseStandardLayout() {
     !f.name.includes('压缩机') && !f.name.includes('配料') && !f.name.includes('控制室')
   ).forEach(p => {
     const cx = p.x + p.w / 2, cy = p.y + p.h / 2
-    const hazard = p.hazardLevel || 0.5
-    addSensor(cx, cy + p.h * 0.4, hazard > 0.6 ? 2 : 3, 0.35 + hazard * 0.3)
+    addSensor(cx, cy + p.h * 0.4)
   })
 
   // 5. 仓储区：危化品库重点覆盖
   warehouseFacilities.forEach(w => {
     const cx = w.x + w.w / 2, cy = w.y + w.h / 2
     if ((w.hazardLevel || 0.3) > 0.6) {
-      addSensor(cx - w.w * 0.25, cy, 1, 0.70)
-      addSensor(cx + w.w * 0.25, cy, 2, 0.50)
+      addSensor(cx - w.w * 0.25, cy)
+      addSensor(cx + w.w * 0.25, cy)
     } else {
-      addSensor(cx, cy, 3, 0.30)
+      addSensor(cx, cy)
     }
   })
 
   // 6. 公用工程 + 污水处理 + 办公区
   utilityFacilities.forEach(u => {
     const cx = u.x + u.w / 2, cy = u.y + u.h / 2
-    addSensor(cx, cy, 3, 0.25)
+    addSensor(cx, cy)
   })
   treatmentFacilities.forEach(t => {
     const cx = t.x + t.w / 2, cy = t.y + t.h / 2
-    addSensor(cx, cy, 2, 0.40)
+    addSensor(cx, cy)
   })
   officeFacilities.forEach(o => {
     const cx = o.x + o.w / 2, cy = o.y + o.h / 2
-    addSensor(cx + 20, cy, 3, 0.15)
+    addSensor(cx + 20, cy)
   })
 
   return layout
@@ -5038,17 +5231,21 @@ function hexToRgb(hex) {
   return `${r},${g},${b}`
 }
 function updateRiskStat() {
-  const high = riskGrid.value.filter(g => g.level === '高').length
-  const mid = riskGrid.value.filter(g => g.level === '中').length
+  const critical = riskGrid.value.filter(g => g.level === '重大').length
+  const high = riskGrid.value.filter(g => g.level === '较大').length
+  const mid = riskGrid.value.filter(g => g.level === '一般').length
   const low = riskGrid.value.filter(g => g.level === '低').length
-  riskStat.value = {high, mid, low}
+  riskStat.value = { critical, high, mid, low }
 }
 function drawRiskGrid() {
   if (!showHeatmap.value) return
   riskGrid.value.forEach(g => {
-    let color = 'rgba(0,229,160,0.05)'
-    if (g.level === '高') color = 'rgba(239,68,68,0.15)'
-    else if (g.level === '中') color = 'rgba(255,107,53,0.12)'
+    const alpha = 0.12
+    let color
+    if (g.level === '重大') color = `rgba(239,68,68,${alpha + 0.06})`
+    else if (g.level === '较大') color = `rgba(249,115,22,${alpha})`
+    else if (g.level === '一般') color = `rgba(234,179,8,${alpha - 0.04})`
+    else color = `rgba(34,197,94,${alpha - 0.07})`
     ctx.fillStyle = color
     ctx.fillRect(g.x - g.gridSize / 2, g.y - g.gridSize / 2, g.gridSize, g.gridSize)
   })
@@ -5059,28 +5256,40 @@ function drawSensors() {
   sensors.value.forEach(s => {
     const type = sensorTypes.find(t => t.id === s.type) || sensorTypes[0]
     const r = resolveSensorEffectiveRange(s, type?.radius || MANUAL_SENSOR_DEFAULTS.effectiveRange)
-    ctx.fillStyle = `rgba(${hexToRgb(type.color)}, 0.12)`
-    ctx.beginPath()
-    ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.strokeStyle = type.color
-    ctx.lineWidth = 0.8 / ss
-    ctx.setLineDash([3, 3])
-    ctx.beginPath()
-    ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.setLineDash([])
+    // 根据风险等级着色 (4级: 红/橙/黄/绿)
+    const riskColor = getPriorityColor(s.priority)
+    const riskColorRgb = hexToRgb(riskColor)
+
+    // 监测范围圈: 使用风险等级颜色
+    if (showSensorRanges.value) {
+      ctx.fillStyle = `rgba(${riskColorRgb}, 0.10)`
+      ctx.beginPath()
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.strokeStyle = `rgba(${riskColorRgb}, 0.45)`
+      ctx.lineWidth = 0.8 / ss
+      ctx.setLineDash([3, 3])
+      ctx.beginPath()
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
+
+    // 选中高亮
     if (selectedSensor.value?.id === s.id) {
       ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth = 1.2 / ss
+      ctx.lineWidth = 1.5 / ss
       ctx.beginPath()
-      ctx.arc(s.x, s.y, 5 / ss, 0, Math.PI * 2)
+      ctx.arc(s.x, s.y, 6 / ss, 0, Math.PI * 2)
       ctx.stroke()
     }
-    ctx.fillStyle = type.color
+
+    // 传感器圆点: 使用风险等级颜色
+    ctx.fillStyle = riskColor
     ctx.beginPath()
-    ctx.arc(s.x, s.y, 2.5 / ss, 0, Math.PI * 2)
+    ctx.arc(s.x, s.y, 3 / ss, 0, Math.PI * 2)
     ctx.fill()
+
   })
 }
 function sensorHitTest(wx, wy) {
@@ -5895,9 +6104,6 @@ watch(
 .risk-dot {
   width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:8px;
 }
-.risk-dot.high {background:var(--danger);}
-.risk-dot.mid {background:var(--warning);}
-.risk-dot.low {background:var(--accent);}
 .risk-stat-item .num {color:var(--fg);font-weight:500;}
 .sensor-stat-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 10px;

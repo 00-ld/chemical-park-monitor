@@ -39,26 +39,6 @@ STABILITY_FACTORS = {
 
 PHASE1_GASES = [
     {
-        "id": "h2s",
-        "name": "硫化氢",
-        "color": "#ef4444",
-        "densityRatio": 1.19,
-        "diffusionBias": 0.9,
-        "warningThreshold": 8,
-        "dangerThreshold": 20,
-        "blockingThreshold": 24,
-    },
-    {
-        "id": "nh3",
-        "name": "液氨",
-        "color": "#38bdf8",
-        "densityRatio": 0.73,
-        "diffusionBias": 1.18,
-        "warningThreshold": 18,
-        "dangerThreshold": 45,
-        "blockingThreshold": 55,
-    },
-    {
         "id": "co",
         "name": "一氧化碳",
         "color": "#f59e0b",
@@ -69,14 +49,34 @@ PHASE1_GASES = [
         "blockingThreshold": 75,
     },
     {
-        "id": "toluene",
-        "name": "甲苯蒸气",
-        "color": "#a855f7",
-        "densityRatio": 1.12,
+        "id": "h2s",
+        "name": "硫化氢",
+        "color": "#ef4444",
+        "densityRatio": 1.19,
+        "diffusionBias": 0.9,
+        "warningThreshold": 8,
+        "dangerThreshold": 20,
+        "blockingThreshold": 24,
+    },
+    {
+        "id": "ch4",
+        "name": "甲烷",
+        "color": "#38bdf8",
+        "densityRatio": 0.55,
+        "diffusionBias": 1.5,
+        "warningThreshold": 10,
+        "dangerThreshold": 20,
+        "blockingThreshold": 30,
+    },
+    {
+        "id": "o2",
+        "name": "氧气",
+        "color": "#22c55e",
+        "densityRatio": 1.11,
         "diffusionBias": 0.95,
-        "warningThreshold": 15,
-        "dangerThreshold": 40,
-        "blockingThreshold": 48,
+        "warningThreshold": 19,
+        "dangerThreshold": 23,
+        "blockingThreshold": 25,
     },
 ]
 
@@ -216,6 +216,12 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
                     -((shifted_cross * shifted_cross) / (2 * effective_sigma_cross * effective_sigma_cross))
                 )
                 downstream_bias = 1.0 if along > -80 else 0.55
+                # 标准高斯烟羽公式 (地面源):
+                #   C = Q / (π·u·σy·σz) × exp(-y²/(2σy²))
+                # σ 单位为网格单元(20px), 转换为实际距离: × GRID_SIZE × MAP_METERS_PER_UNIT
+                sigma_y_m = effective_sigma_cross * GRID_SIZE * MAP_METERS_PER_UNIT
+                sigma_z_m = effective_sigma_along * GRID_SIZE * MAP_METERS_PER_UNIT * 0.6
+                norm_factor = math.pi * max(wind_speed, 1.1) * sigma_y_m * sigma_z_m
                 concentration = max(
                     0.0,
                     source_rate
@@ -230,8 +236,7 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
                     * obstacle_effect["shadowFactor"]
                     * channel_effect["channelFactor"]
                     * gaussian
-                    * 8.4
-                    / max(wind_speed, 1.1),
+                    / max(norm_factor, 0.01),
                 )
 
                 if concentration >= 0.12:

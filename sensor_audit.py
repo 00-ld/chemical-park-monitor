@@ -81,6 +81,189 @@ STANDARDS = {
 }
 
 # ============================================================
+# 传感器风险值自动计算
+#
+# ═══════════════════════════════════════════════════════════════
+# 严格依据 GB 18218-2018《危险化学品重大危险源辨识》
+# 第4.3.2条 公式(2):
+#   R = α × (β₁×q₁/Q₁ + β₂×q₂/Q₂ + ... + βₙ×qₙ/Qₙ)
+#
+# 本项目单传感器单物质场景简化为:
+#   R = α × β × (q/Q)
+#
+# 引用条文:
+#   表3: 毒性气体校正系数β (H2S=5, NH3=2, CO=2, ...)
+#   表4: 其他危险化学品β (易燃气体=1.5, 氧化性气体=1.0)
+#   表5: 暴露人员校正系数α (≥100人=2.0, 50~99=1.5, 30~49=1.2, 1~29=1.0, 0人=0.5)
+#   表6: 分级标准 (R≥100一级, 50~100二级, 10~50三级, <10四级)
+#   表1: 临界量Q (H2S=5t, NH3=10t, CO=30t, CH4=50t, O2=200t)
+# ═══════════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────────
+# 一、β — 毒性气体校正系数 (GB 18218-2018 表3 原文)
+# ───────────────────────────────────────────────────────────────
+# 表3 毒性气体校正系数β取值表:
+#   一氧化碳 CO = 2    氨 NH3 = 2
+#   硫化氢 H2S = 5     氯 = 4
+#   二氧化氮 = 10       氰化氢 = 10
+#   碳酰氯 = 20         磷化氢 = 20
+#
+# 表4 未在表3中列举的:
+#   W2 易燃气体 = 1.5
+#   W4 氧化性气体 = 1.0
+#   其他 = 1.0
+#
+SUBSTANCE_BETA = {
+    'H2S': 5,      # GB 18218 表3: 硫化氢 β=5
+    'NH3': 2,      # GB 18218 表3: 氨 β=2
+    'CO': 2,       # GB 18218 表3: 一氧化碳 β=2
+    'CH4': 1.5,    # GB 18218 表4 W2: 易燃气体 β=1.5
+    'C2H4': 1.5,   # GB 18218 表4 W2: 易燃气体 β=1.5
+    'C3H6': 1.5,   # GB 18218 表4 W2: 易燃气体 β=1.5
+    '可燃': 1.0,   # 一般可燃气体 β=1.0
+    'O2': 1.0,     # GB 18218 表4 W4: 氧化性气体 β=1.0
+}
+
+def get_substance_beta(detection_range):
+    """根据检测气体范围返回β (取最高值)"""
+    max_beta = 1.0  # 默认
+    for gas, beta in SUBSTANCE_BETA.items():
+        if gas in detection_range:
+            max_beta = max(max_beta, beta)
+    return max_beta
+
+# ───────────────────────────────────────────────────────────────
+# 二、α — 暴露人员校正系数 (GB 18218-2018 表5 原文)
+# ───────────────────────────────────────────────────────────────
+# 表5 厂区边界向外扩展500m范围内常住人口:
+#   ≥100人 = 2.0    50~99人 = 1.5
+#   30~49人 = 1.2    1~29人 = 1.0
+#   0人 = 0.5
+#
+# 映射: 根据区域前缀估算暴露人数
+ZONE_ALPHA = {
+    'PA': 1.2,   # 化工生产一区: 30~49人
+    'PB': 1.2,   # 精细化工厂房: 30~49人
+    'P2': 1.2,   # 化工生产二区: 30~49人
+    'TK': 1.0,   # 储罐区: 1~29人
+    'TW': 1.0,   # 塔器区: 1~29人
+    'WH': 1.0,   # 仓储物流区: 1~29人
+    'A':  1.5,   # 行政办公区: 50~99人 (含办公楼人员)
+    'UT': 0.5,   # 公用工程区: 0人
+    'WT': 0.5,   # 污水处理区: 0人
+    'MN': 1.0,   # 环境监测区: 1~29人
+    'MT': 0.5,   # 机修维护区: 0人
+    'FS': 0.5,   # 消防设施区: 0人
+    'FD': 0.5,   # 防火堤: 0人
+    'PL': 1.0,   # 管道: 1~29人
+}
+
+def get_exposure_alpha(sensor_id, remark, zone_prefix):
+    """返回α (GB 18218 表5)"""
+    return ZONE_ALPHA.get(zone_prefix, 0.5)
+
+# ───────────────────────────────────────────────────────────────
+# 三、q/Q — 实际存在量与临界量比值 (GB 18218 表1)
+# ───────────────────────────────────────────────────────────────
+# 临界量Q (GB 18218 表1):
+#   H2S=5t, NH3=10t, CO=30t, CH4=50t, C2H4=50t, O2=200t
+#
+# 传感器场景: 用设施 hazardLevel 映射有效 q/Q
+#   q/Q = 0.5 + hazardLevel × 9.5
+#   hazardLevel=1.0 → q/Q=10.0 (满量危化品)
+#   hazardLevel=0.1 → q/Q=1.45 (少量)
+#
+# 具体设施hazardLevel (与parkAssets.js一致):
+FACILITY_HAZARD = {
+    # 储罐区
+    'TK': {'default': 0.80, 't07': 1.00, 't08': 0.95, 't02': 0.65, 't04': 0.60},
+    # 塔器区
+    'TW': {'default': 0.60},
+    # 化工生产一区
+    'PA': {'default': 0.70, 'b07': 0.75, 'b06': 0.70, 'b05': 0.65, 'b09': 0.55, 'b08': 0.20},
+    # 精细化工厂房
+    'PB': {'default': 0.65, 'b11': 0.65, 'b10': 0.60, 'b12': 0.40, 'b13': 0.25},
+    # 化工生产二区
+    'P2': {'default': 0.60},
+    # 仓储物流区
+    'WH': {'default': 0.50, 'b23': 0.85, 'b20': 0.60},
+    # 公用工程区
+    'UT': {'default': 0.30, 'b14': 0.40, 'b19': 0.50},
+    # 污水处理区
+    'WT': {'default': 0.40},
+    # 环境监测区
+    'MN': {'default': 0.15},
+    # 行政办公区
+    'A':  {'default': 0.15},
+    # 机修维护区
+    'MT': {'default': 0.25},
+    # 消防设施区
+    'FS': {'default': 0.30},
+    # 防火堤
+    'FD': {'default': 0.50},
+    # 管道
+    'PL': {'default': 0.65},
+}
+
+def get_quantity_ratio(sensor_id, zone_prefix, remark=''):
+    """返回有效q/Q (基于具体设施hazardLevel, 与前端parkAssets.js一致)"""
+    zone_data = FACILITY_HAZARD.get(zone_prefix, {'default': 0.3})
+
+    # 尝试从sensor_id或remark匹配具体设施
+    remark_lower = remark.lower()
+    sid_lower = sensor_id.lower()
+    for key, hl in zone_data.items():
+        if key == 'default':
+            continue
+        # t08 匹配 remark中的 "T-08"、"t-08"、"t08" 等
+        if (key in sid_lower or key in remark_lower
+                or key.replace('t', 't-') in remark_lower
+                or key.replace('b', 'b-') in remark_lower):
+            return 0.5 + hl * 9.5
+
+    # 使用区域默认值
+    h_level = zone_data.get('default', 0.3)
+    return 0.5 + h_level * 9.5
+
+def compute_sensor_risk(sensor):
+    """
+    GB 18218-2018 第4.3.2条 公式(2):
+    R = α × β × (q/Q)
+    """
+    dr = sensor.get('dr', '')
+    sid = sensor.get('id', '')
+    h = sensor.get('h', 1.5)
+    remark = sensor.get('remark', '')
+
+    zone_prefix = sid.split('-')[0] if '-' in sid else ''
+
+    beta = get_substance_beta(dr)
+    alpha = get_exposure_alpha(sid, remark, zone_prefix)
+    qQ = get_quantity_ratio(sid, zone_prefix, remark)
+
+    # 安装高度修正 (GB/T 50493 第6.1.2条)
+    location_correction = 1.0
+    if h >= 2.0:
+        location_correction = 1.05
+    elif h <= 0.5:
+        location_correction = 1.10
+
+    R = alpha * beta * qQ * location_correction
+    R = round(R, 2)
+
+    # GB 18218 表6: R≥100一级, 50~100二级, 10~50三级, <10四级
+    if R >= 50:
+        priority = 1
+    elif R >= 10:
+        priority = 2
+    elif R >= 5:
+        priority = 3
+    else:
+        priority = 4
+
+    return R, priority
+
+# ============================================================
 # 区域1: 行政办公区 (A)
 # 设施: b01综合办公楼, b02研发中心, b03食堂, b04消防站
 # ============================================================
@@ -855,6 +1038,19 @@ for prefix, (name, sensors) in zones.items():
 print(f"\n总计: {total}个传感器")
 print()
 
+# 风险等级统计
+risk_counts = {1: 0, 2: 0, 3: 0, 4: 0}
+for s in all_sensors:
+    _, pri = compute_sensor_risk(s)
+    risk_counts[pri] = risk_counts.get(pri, 0) + 1
+
+print("风险等级统计 (GB 18218-2018 四级分级):")
+print(f"  1级 重大风险: {risk_counts[1]}个传感器")
+print(f"  2级 较大风险: {risk_counts[2]}个传感器")
+print(f"  3级 一般风险: {risk_counts[3]}个传感器")
+print(f"  4级 低风险:   {risk_counts[4]}个传感器")
+print()
+
 # 输出SQL
 print("-- " + "=" * 58)
 print("-- SQL UPDATE: 重命名传感器ID并更新install_remark")
@@ -865,4 +1061,5 @@ for s in all_sensors:
     id_val = s['id'].replace("'", "''")
     remark = s['remark'].replace("'", "''")
     dr = s['dr'].replace("'", "''")
-    print(f"INSERT INTO chemical.sensor (id, x, y, installation_height, effective_range, detection_range, install_remark, priority, risk, type, mode) VALUES ('{id_val}', {s['x']}, {s['y']}, {s['h']}, {s['er']}, '{dr}', '{remark}', {s['pri']}, {s['risk']}, 'gas', 'auto');")
+    risk_score, priority = compute_sensor_risk(s)
+    print(f"INSERT INTO chemical.sensor (id, x, y, installation_height, effective_range, detection_range, install_remark, priority, risk, type, mode) VALUES ('{id_val}', {s['x']}, {s['y']}, {s['h']}, {s['er']}, '{dr}', '{remark}', {priority}, {risk_score}, 'gas', 'auto');")

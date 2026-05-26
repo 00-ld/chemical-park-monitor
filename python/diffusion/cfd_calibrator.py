@@ -179,7 +179,7 @@ def build_cfd_calibration_factors(
     turbulence = STABILITY_TURBULENCE.get(stability_class, STABILITY_TURBULENCE["D"])
     wind_factor = clamp(wind_speed / 8.0, 0.0, 1.0)
     direction_bias = math.sin((wind_direction * math.pi) / 180.0) * 0.08
-    gas_bias = 0.06 if gas_id == "nh3" else 0.04 if gas_id == "h2s" else 0.03
+    gas_bias = 0.06 if gas_id == "h2s" else 0.04 if gas_id == "co" else 0.03
 
     return {
         "obstacleDensity": round(density_factor, 4),

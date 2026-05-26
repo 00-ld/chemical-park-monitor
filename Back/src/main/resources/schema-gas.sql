@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS `gas` (
     `installation_height` DOUBLE       DEFAULT 1.5 COMMENT '安装高度 (m)',
     `effective_range`     DOUBLE       DEFAULT 20 COMMENT '有效监测范围 (m)',
     `install_remark`      VARCHAR(500) DEFAULT '' COMMENT '布点说明 / 备注',
-    `priority`            INT          DEFAULT 2 COMMENT '优先级 1=高危 2=常规 3=辅助',
+    `priority`            INT          DEFAULT 3 COMMENT '风险等级 1=重大风险 2=较大风险 3=一般风险 4=低风险',
     `risk`                DOUBLE       DEFAULT 0.3 COMMENT '风险值 0~1',
     `type`                VARCHAR(20)  DEFAULT 'gas' COMMENT '传感器类型',
     `mode`                VARCHAR(10)  DEFAULT 'auto' COMMENT '数据模式 auto/manual',

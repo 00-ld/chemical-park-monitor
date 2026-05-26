@@ -25,12 +25,12 @@ DEFAULT_TRAINING_CONFIG = {
 
 DEFAULT_COARSE_SEARCH_CONFIG = {
     "topK": 4,
-    "gridStep": 60,
+    "gridStep": 20,
     "candidateRadius": 45,
     "supportRadius": 140,
     "distanceScale": 90,
     "mergeDistance": 80,
-    "minObservationThreshold": 1.5,
+    "minObservationThreshold": 0.5,
 }
 
 
@@ -104,17 +104,19 @@ def normalize_inversion_payload(payload: Dict) -> Dict:
 def normalize_coarse_search_payload(payload: Dict) -> Dict:
     """Normalize a coarse search payload into a standardized dataset.
 
-    Extracts gas, config, frame info, and sensor data from various
-    payload structures.
+    Extracts gas, config, scenario (wind data), frame info, and sensor
+    data from various payload structures.
 
     Args:
         payload: Raw coarse search request payload.
 
     Returns:
-        Normalized dataset dict with gas, config, frame index, and sensors.
+        Normalized dataset dict with gas, config, scenario, frame index,
+        and sensors.
     """
     export_payload = payload.get("pinnExportPayload") or payload.get("exportPayload") or payload
     gas = export_payload.get("gas") or payload.get("gas") or {}
+    scenario = export_payload.get("scenario") or payload.get("scenario") or {}
     config = {
         **DEFAULT_COARSE_SEARCH_CONFIG,
         **(payload.get("config") or export_payload.get("inversionConfig") or {}),
@@ -135,6 +137,7 @@ def normalize_coarse_search_payload(payload: Dict) -> Dict:
     return {
         "gas": gas,
         "config": config,
+        "scenario": scenario,
         "currentFrameIndex": current_frame_index,
         "frameTimeSec": frame_time_sec,
         "sensors": export_payload.get("sensors") or payload.get("sensors") or [],

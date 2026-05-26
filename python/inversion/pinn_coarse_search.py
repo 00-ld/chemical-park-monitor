@@ -1,8 +1,9 @@
 """Coarse grid search for gas source candidate regions.
 
 Performs a grid-based search over sensor signals to identify candidate
-areas where the gas leak source is most likely located. Uses distance-
-weighted signal matching with support count and error scoring.
+areas where the gas leak source is most likely located. Uses the
+Gaussian plume model for wind-aware signal prediction with support
+count and error scoring.
 
 Typical usage:
     result = run_coarse_search(payload)
@@ -14,18 +15,23 @@ import math
 from typing import Dict, List
 
 from .pinn_dataset import normalize_coarse_search_payload
+from .pinn_losses import fit_emission_rate, gaussian_plume_predict
 
 MAP_METERS_PER_UNIT = 0.5
 ORIGIN_LONGITUDE = 118.78
 ORIGIN_LATITUDE = 32.04
 BASE_ALTITUDE = 18.0
+GRID_MIN_X = 40
+GRID_MIN_Y = 40
+GRID_MAX_X = 961
+GRID_MAX_Y = 611
 
 
 def run_coarse_search(payload: Dict) -> Dict:
     """Run a coarse grid search for candidate gas source regions.
 
-    Iterates over a grid of candidate points, evaluates weighted error
-    and influence scores against active sensor observations, and returns
+    Iterates over a grid of candidate points, evaluates Gaussian plume
+    prediction error against active sensor observations, and returns
     the top-ranked non-overlapping candidate regions.
 
     Args:
@@ -36,6 +42,10 @@ def run_coarse_search(payload: Dict) -> Dict:
     """
     dataset = normalize_coarse_search_payload(payload)
     config = dataset["config"]
+    scenario = dataset.get("scenario") or {}
+    wind_speed = float(scenario.get("windSpeed") or 1.0)
+    wind_direction = float(scenario.get("windDirection") or 0)
+
     sensors = build_active_sensors(
         sensors=dataset.get("sensors") or [],
         current_frame_index=int(dataset.get("currentFrameIndex") or 0),
@@ -56,22 +66,35 @@ def run_coarse_search(payload: Dict) -> Dict:
             },
         }
 
-    max_observed = max(max(sensor["observedSignal"] for sensor in sensors), 1.0)
     candidates = []
-    for x in range(40, 961, int(config["gridStep"])):
-        for y in range(40, 611, int(config["gridStep"])):
+    grid_step = int(config["gridStep"])
+    support_radius = float(config.get("supportRadius") or 140)
+    max_observed = max(s["observedSignal"] for s in sensors) or 1.0
+
+    for x in range(GRID_MIN_X, GRID_MAX_X, grid_step):
+        for y in range(GRID_MIN_Y, GRID_MAX_Y, grid_step):
             weighted_error = 0.0
             influence_score = 0.0
             support_count = 0
 
+            raw_predictions = []
             for sensor in sensors:
-                distance = max(math.hypot(sensor["x"] - x, sensor["y"] - y), 1.0)
-                predicted = 1 / (1 + distance / float(config["distanceScale"]))
-                observed = sensor["observedSignal"] / max_observed
-                error = abs(predicted - observed)
+                pred = gaussian_plume_predict(
+                    x, y,
+                    sensor["x"], sensor["y"],
+                    wind_speed, wind_direction,
+                )
+                raw_predictions.append(pred)
+            max_predicted = max(raw_predictions) or 1.0
+
+            for i, sensor in enumerate(sensors):
+                norm_predicted = raw_predictions[i] / max_predicted
+                norm_observed = sensor["observedSignal"] / max_observed
+                error = abs(norm_predicted - norm_observed)
                 weighted_error += error * (1 + sensor["priority"] * 0.18)
-                influence_score += predicted * observed
-                if distance <= float(config["supportRadius"]):
+                influence_score += min(norm_predicted, norm_observed)
+                distance = max(math.hypot(sensor["x"] - x, sensor["y"] - y), 1.0)
+                if distance <= support_radius:
                     support_count += 1
 
             normalized_error = weighted_error / len(sensors)

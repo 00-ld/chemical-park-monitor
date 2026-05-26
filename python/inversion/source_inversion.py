@@ -13,8 +13,114 @@ from __future__ import annotations
 import math
 from typing import Dict, List, Sequence
 
-from .pinn_losses import compute_loss_snapshot
+from .pinn_losses import compute_loss_snapshot, fit_emission_rate, gaussian_plume_predict
 from .pinn_model import blend_points, estimate_weighted_center
+
+SIMPLEX_MAX_ITER = 200
+SIMPLEX_ALPHA = 1.0
+SIMPLEX_GAMMA = 2.0
+SIMPLEX_RHO = 0.5
+SIMPLEX_SIGMA = 0.5
+SIMPLEX_XTOL = 3.0
+SIMPLEX_FTOL = 1e-4
+
+
+def nelder_mead_2d(
+    objective,
+    x0: float,
+    y0: float,
+    initial_step: float = 25.0,
+    max_iter: int = SIMPLEX_MAX_ITER,
+    xtol: float = SIMPLEX_XTOL,
+    ftol: float = SIMPLEX_FTOL,
+) -> Dict:
+    """Run Nelder-Mead simplex optimization in 2D.
+
+    Args:
+        objective: Function that takes (x, y) and returns a scalar loss.
+        x0: Initial X coordinate.
+        y0: Initial Y coordinate.
+        initial_step: Initial simplex edge length.
+        max_iter: Maximum iterations.
+        xtol: Convergence threshold for coordinate change.
+        ftol: Convergence threshold for function value change.
+
+    Returns:
+        Dict with 'best', 'history', 'iterations', 'converged'.
+    """
+    simplex = [
+        [x0, y0],
+        [x0 + initial_step, y0],
+        [x0, y0 + initial_step],
+    ]
+    values = [objective(p[0], p[1]) for p in simplex]
+    history = [{"x": p[0], "y": p[1], "loss": v} for p, v in zip(simplex, values)]
+
+    for iteration in range(max_iter):
+        order = sorted(range(3), key=lambda i: values[i])
+        best_idx, worst_idx = order[0], order[2]
+        mid_idx = order[1]
+
+        if values[worst_idx] - values[best_idx] < ftol:
+            return {
+                "best": {"x": simplex[best_idx][0], "y": simplex[best_idx][1]},
+                "history": history,
+                "iterations": iteration + 1,
+                "converged": True,
+            }
+
+        centroid = [
+            (simplex[best_idx][0] + simplex[mid_idx][0]) / 2.0,
+            (simplex[best_idx][1] + simplex[mid_idx][1]) / 2.0,
+        ]
+
+        reflected = [
+            centroid[0] + SIMPLEX_ALPHA * (centroid[0] - simplex[worst_idx][0]),
+            centroid[1] + SIMPLEX_ALPHA * (centroid[1] - simplex[worst_idx][1]),
+        ]
+        f_reflected = objective(reflected[0], reflected[1])
+
+        if values[best_idx] <= f_reflected < values[mid_idx]:
+            simplex[worst_idx] = reflected
+            values[worst_idx] = f_reflected
+        elif f_reflected < values[best_idx]:
+            expanded = [
+                centroid[0] + SIMPLEX_GAMMA * (reflected[0] - centroid[0]),
+                centroid[1] + SIMPLEX_GAMMA * (reflected[1] - centroid[1]),
+            ]
+            f_expanded = objective(expanded[0], expanded[1])
+            if f_expanded < f_reflected:
+                simplex[worst_idx] = expanded
+                values[worst_idx] = f_expanded
+            else:
+                simplex[worst_idx] = reflected
+                values[worst_idx] = f_reflected
+        else:
+            contracted = [
+                centroid[0] + SIMPLEX_RHO * (simplex[worst_idx][0] - centroid[0]),
+                centroid[1] + SIMPLEX_RHO * (simplex[worst_idx][1] - centroid[1]),
+            ]
+            f_contracted = objective(contracted[0], contracted[1])
+            if f_contracted < values[worst_idx]:
+                simplex[worst_idx] = contracted
+                values[worst_idx] = f_contracted
+            else:
+                for i in range(3):
+                    if i != best_idx:
+                        simplex[i][0] = simplex[best_idx][0] + SIMPLEX_SIGMA * (simplex[i][0] - simplex[best_idx][0])
+                        simplex[i][1] = simplex[best_idx][1] + SIMPLEX_SIGMA * (simplex[i][1] - simplex[best_idx][1])
+                        values[i] = objective(simplex[i][0], simplex[i][1])
+
+        best_val = min(values)
+        history.append({"x": simplex[order[0]][0], "y": simplex[order[0]][1], "loss": best_val})
+
+    best_idx = min(range(3), key=lambda i: values[i])
+    return {
+        "best": {"x": simplex[best_idx][0], "y": simplex[best_idx][1]},
+        "history": history,
+        "iterations": max_iter,
+        "converged": False,
+    }
 
 
 def run_two_stage_inversion(dataset: Dict) -> Dict:
@@ -154,16 +260,17 @@ def refine_candidate(
     gas: Dict,
     true_source_map_point: Dict | None,
 ) -> Dict:
-    """Iteratively refine a candidate source location.
+    """Refine a candidate source location using Nelder-Mead optimization.
 
-    Progressively shrinks the search radius from the candidate region
-    toward the weighted sensor center, computing loss at each iteration.
+    Uses gradient-free simplex optimization to minimize the Gaussian
+    plume observation loss, starting from the candidate center and
+    bounded within the candidate region.
 
     Args:
         candidate: Selected candidate region to refine.
         sensors: Active sensor list.
         scenario: Scenario dict with wind data.
-        weighted_center: Sensor-weighted center target.
+        weighted_center: Sensor-weighted center for initialization.
         training_config: Config dict with animationSteps and
             convergenceRatio.
         gas: Gas properties dict.
@@ -174,26 +281,60 @@ def refine_candidate(
         Refinement result with iterations, estimated source, loss
         history, and error metrics.
     """
-    total_iterations = max(int(training_config.get("animationSteps") or 18), 8)
-    convergence_ratio = float(training_config.get("convergenceRatio") or 0.22)
-    start_radius = float(candidate.get("radius") or 45) * 1.25
-    end_radius = max(8.0, float(candidate.get("radius") or 45) * convergence_ratio)
-    target_center = blend_points(candidate["center"], weighted_center, 0.72)
+    wind_speed = float(scenario.get("windSpeed") or 1.0)
+    wind_direction = float(scenario.get("windDirection") or 0)
+    candidate_center = candidate["center"]
+    candidate_radius = float(candidate.get("radius") or 45)
+    bounds_min_x = candidate_center["x"] - candidate_radius * 2.5
+    bounds_max_x = candidate_center["x"] + candidate_radius * 2.5
+    bounds_min_y = candidate_center["y"] - candidate_radius * 2.5
+    bounds_max_y = candidate_center["y"] + candidate_radius * 2.5
+
+    def objective(x, y):
+        x_clamped = max(bounds_min_x, min(bounds_max_x, x))
+        y_clamped = max(bounds_min_y, min(bounds_max_y, y))
+        center = {"x": x_clamped, "y": y_clamped}
+        snapshot = compute_loss_snapshot(center, candidate, sensors, scenario)
+        return snapshot["total"]
+
+    initial_x = blend_points(candidate_center, weighted_center, 0.5)["x"]
+    initial_y = blend_points(candidate_center, weighted_center, 0.5)["y"]
+    initial_step = max(candidate_radius * 1.5, 25.0)
+
+    nm_result = nelder_mead_2d(
+        objective, initial_x, initial_y,
+        initial_step=initial_step,
+        max_iter=max(int(training_config.get("animationSteps") or 18), 20) * 8,
+    )
+
+    best_center = nm_result["best"]
+    best_center["x"] = round(best_center["x"], 2)
+    best_center["y"] = round(best_center["y"], 2)
 
     iterations = []
     shrink_frames = []
     loss_history = []
-    for index in range(total_iterations):
-        progress = 1.0 if total_iterations == 1 else index / (total_iterations - 1)
+    total_points = len(nm_result["history"])
+    max_animation_steps = max(int(training_config.get("animationSteps") or 18), 8)
+    step_indices = []
+    if total_points <= max_animation_steps:
+        step_indices = list(range(total_points))
+    else:
+        for i in range(max_animation_steps):
+            step_indices.append(int(i * (total_points - 1) / (max_animation_steps - 1)))
+
+    for anim_idx, hist_idx in enumerate(step_indices):
+        point = nm_result["history"][hist_idx]
+        center = {"x": round(point["x"], 2), "y": round(point["y"], 2)}
+        progress = anim_idx / max(max_animation_steps - 1, 1)
         eased = 1 - math.pow(1 - progress, 2)
-        center = blend_points(candidate["center"], target_center, eased)
-        radius = round(start_radius + (end_radius - start_radius) * eased, 2)
-        polygon = build_refinement_polygon(center, radius, index, int(candidate.get("rank") or 1))
+        radius = round(candidate_radius * (1.2 - eased * 0.85), 2)
+        polygon = build_refinement_polygon(center, radius, anim_idx, int(candidate.get("rank") or 1))
         loss_snapshot = compute_loss_snapshot(center, candidate, sensors, scenario)
         confidence = round(1 - eased * 0.78, 4)
 
-        iteration = {
-            "iteration": index + 1,
+        iterations.append({
+            "iteration": anim_idx + 1,
             "progress": round(progress, 4),
             "center": center,
             "radius": radius,
@@ -201,10 +342,21 @@ def refine_candidate(
             "loss": loss_snapshot["total"],
             "confidence": confidence,
             "lossBreakdown": loss_snapshot,
-        }
-        iterations.append(iteration)
+        })
         shrink_frames.append(polygon)
         loss_history.append(loss_snapshot["total"])
+
+    if not iterations:
+        final_center = {"x": round(best_center["x"], 2), "y": round(best_center["y"], 2)}
+        final_loss = objective(final_center["x"], final_center["y"])
+        final_snapshot = compute_loss_snapshot(final_center, candidate, sensors, scenario)
+        iterations.append({
+            "iteration": 1, "progress": 1.0, "center": final_center,
+            "radius": round(candidate_radius * 0.35, 2),
+            "polygon": build_refinement_polygon(final_center, candidate_radius * 0.35, 0, 1),
+            "loss": final_loss, "confidence": 0.22, "lossBreakdown": final_snapshot,
+        })
+        loss_history.append(final_loss)
 
     estimated = iterations[-1]
     source_match_error = None
@@ -224,13 +376,15 @@ def refine_candidate(
         "candidateCount": 1,
         "warningThreshold": float(gas.get("warningThreshold") or 0),
         "dangerThreshold": float(gas.get("dangerThreshold") or 0),
+        "optimizerConverged": nm_result["converged"],
+        "optimizerIterations": nm_result["iterations"],
     }
     summary = {
         "bestCandidateId": candidate.get("candidateId"),
         "finalLoss": estimated["loss"],
         "sourceMatchError": source_match_error,
         "estimatedCoord": f"{estimated['center']['x']:.0f}, {estimated['center']['y']:.0f}",
-        "totalIterations": total_iterations,
+        "totalIterations": nm_result["iterations"],
     }
     return {
         "iterations": iterations,
