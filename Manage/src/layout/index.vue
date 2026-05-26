@@ -269,7 +269,7 @@ $header-height: 80px; // 顶部导航高度
 // 内容区域（适配header+tabbar高度）
 .layout_main {
   margin-top: calc($header-height + $base-tabbar-height);
-  padding: 24px 100px;
+  padding: 24px 40px;
   min-height: calc(100vh - $header-height - $base-tabbar-height);
   max-width: 1920px;
   margin-left: auto;

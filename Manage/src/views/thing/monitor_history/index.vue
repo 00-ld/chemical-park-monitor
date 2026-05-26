@@ -124,70 +124,57 @@
               :data="historyList"
               border
               stripe
-              :header-cell-style="{background: '#f5f7fa', color: '#303133', fontWeight: '600'}"
+              :header-cell-style="{background: 'rgba(10, 25, 50, 0.9)', color: '#40e0d0', fontWeight: '600', borderBottom: '1px solid rgba(64,224,208,0.2)'}"
               :row-class-name="({row}) => `level-${getLevelTagType(getRiskLevel(row))}`"
               class="history-table"
           >
-            <el-table-column prop="carId" label="小车编号" align="center" width="120" />
-            <el-table-column prop="areaName" label="所属区域" align="center" width="120" />
-            <el-table-column prop="x" label="坐标X" align="center" width="120" />
-            <el-table-column prop="y" label="坐标Y" align="center" width="120" />
-            <el-table-column prop="gasType" label="气体类型" align="center" width="100">
+            <el-table-column prop="carId" label="小车编号" align="center" width="110" />
+            <el-table-column prop="areaName" label="所属区域" align="center" width="110" />
+            <el-table-column prop="x" label="坐标X" align="center" width="80" />
+            <el-table-column prop="y" label="坐标Y" align="center" width="80" />
+            <el-table-column prop="gasType" label="气体类型" align="center" width="110">
               <template #default="scope">
-                <el-tag size="small" type="info" class="gas-tag">
+                <el-tag size="small" class="gas-tag" :type="getRiskLevel(scope.row) <= 2 ? 'danger' : 'warning'">
                   {{ formatGasType(scope.row.gasType) }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="gasValue" label="浓度值" align="center" width="170">
+            <el-table-column prop="gasValue" label="浓度值" align="center" width="120">
               <template #default="scope">
-                <span class="concentration-text">
+                <span class="concentration-text" :class="{'danger-value': getRiskLevel(scope.row) <= 2}">
                   {{ scope.row.gasValue }}
                   {{ scope.row.gasType === 'o2' ? '%VOL' : 'ppm' }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="危险等级" align="center" width="130">
+            <el-table-column label="危险等级" align="center" width="100">
               <template #default="scope">
-                <div
-                    class="level-tag"
-                    :class="getLevelTagType(getRiskLevel(scope.row))"
-                >
+                <div class="level-tag" :class="getLevelTagType(getRiskLevel(scope.row))">
                   {{ getRiskLevelText(getRiskLevel(scope.row)) }}
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="warningTime" label="预警时间" align="center" width="220">
+            <el-table-column prop="warningTime" label="预警时间" align="center" width="180">
               <template #default="scope">
                 {{ formatTime(scope.row.warningTime) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" align="center" width="130">
+            <el-table-column label="操作" align="center" width="100">
               <template #default="scope">
-                <el-button
-                    type="danger"
-                    size="small"
-                    icon="Delete"
-                    @click="handleDelete(scope.row.id)"
-                    class="delete-btn"
-                >
-                  删除
-                </el-button>
+                <el-button size="small" icon="Delete" @click="handleDelete(scope.row.id)" class="delete-btn">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
         </div>
 
-        <!-- 泄漏统计图表（只保留一个，美观居中） -->
-        <el-card class="card chart-card" shadow="hover">
-          <div class="chart-item">
-            <div class="chart-title">
-              <el-icon><Histogram /></el-icon>
-              各区域泄漏次数统计
-            </div>
-            <div ref="areaChartRef" class="chart-box"></div>
+        <!-- 泄漏统计图表 -->
+        <div class="chart-card-inline">
+          <div class="chart-title-bar">
+            <el-icon><Histogram /></el-icon>
+            各区域泄漏次数统计
           </div>
-        </el-card>
+          <div ref="areaChartRef" class="chart-box"></div>
+        </div>
       </el-card>
     </div>
 
@@ -477,35 +464,36 @@ const renderCharts = () => {
   areaChart.setOption({
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(0, 20, 40, 0.8)',
+      backgroundColor: 'rgba(0, 20, 40, 0.9)',
       borderColor: '#40e0d0',
       textStyle: { color: '#fff', fontSize: 14 }
     },
     grid: {
-      left: '10%',
-      right: '10%',
-      bottom: '15%',
-      top: '15%'
+      left: '8%',
+      right: '6%',
+      bottom: '12%',
+      top: '10%'
     },
     xAxis: {
       type: 'category',
       data: areaNames,
       axisLabel: {
-        fontSize: 16, // 放大X轴字体
-        color: '#e0e6ed' // 适配深色背景
+        fontSize: 14,
+        color: '#b8e8e4',
+        fontWeight: 500
       },
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.2)' } },
-      axisTick: { lineStyle: { color: 'rgba(255,255,255,0.2)' } }
+      axisLine: { lineStyle: { color: 'rgba(64,224,208,0.3)' } },
+      axisTick: { show: false }
     },
     yAxis: {
       type: 'value',
       axisLabel: {
-        fontSize: 16, // 放大Y轴字体
-        color: '#e0e6ed'
+        fontSize: 14,
+        color: '#b8e8e4'
       },
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.2)' } },
-      axisTick: { lineStyle: { color: 'rgba(255,255,255,0.2)' } },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+      splitLine: { lineStyle: { color: 'rgba(64,224,208,0.08)', type: 'dashed' } },
+      axisLine: { show: false },
+      axisTick: { show: false }
     },
     series: [{
       type: 'bar',
@@ -515,7 +503,7 @@ const renderCharts = () => {
           { offset: 0, color: '#409eff' },
           { offset: 1, color: '#40e0d0' }
         ]),
-        borderRadius: [4, 4, 0, 0]
+        borderRadius: [6, 6, 0, 0]
       },
       emphasis: {
         itemStyle: {
@@ -525,12 +513,13 @@ const renderCharts = () => {
           ])
         }
       },
-      barWidth: 45, // 缩小柱状体粗度
-      barMaxWidth: 40,
-      barMinWidth: 20,
-      barGap: '5%',
-      barCategoryGap: '15%'
-    }]
+      barWidth: '60%',
+      barMaxWidth: 60,
+      barMinWidth: 30,
+      barGap: '30%',
+      barCategoryGap: '40%'
+    }],
+    backgroundColor: 'transparent'
   })
 }
 
@@ -1065,14 +1054,25 @@ const handleDelete = async (id: number) => {
 .radio-group {
   display: flex;
   gap: 4px;
-  background-color: #f8fafc;
+  background-color: rgba(0, 0, 0, 0.3);
   padding: 8px;
   border-radius: 8px;
+  border: 1px solid rgba(64, 224, 208, 0.15);
 }
 
 :deep(.radio-group .el-radio-button__inner) {
   border-radius: 6px !important;
   padding: 8px 20px;
+  background: rgba(0,0,0,0.3);
+  color: #e0e6ed;
+  border-color: rgba(64,224,208,0.15);
+}
+
+:deep(.radio-group .el-radio-button.is-active .el-radio-button__inner) {
+  background: linear-gradient(135deg, rgba(64,224,208,0.3), rgba(64,158,255,0.3));
+  color: #40e0d0;
+  border-color: rgba(64,224,208,0.5);
+  box-shadow: none;
 }
 
 .table-container {
@@ -1081,19 +1081,29 @@ const handleDelete = async (id: number) => {
 }
 
 .level-table {
-  --el-table-row-hover-bg-color: #f1f5f9;
+  --el-table-bg-color: transparent !important;
+  --el-table-tr-bg-color: transparent !important;
+  --el-table-row-hover-bg-color: rgba(64, 224, 208, 0.08) !important;
+  --el-table-border-color: rgba(64, 224, 208, 0.12) !important;
   font-size: 14px;
   border-radius: 8px;
   overflow: hidden;
 }
 
 :deep(.level-table .el-table__header) {
-  background-color: #f8fafc;
+  background-color: transparent;
 }
 
 :deep(.level-table .el-table__cell) {
-  padding: 14px 12px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 10px;
+  border-bottom: 1px solid rgba(64,224,208,0.08);
+  color: #e0e6ed;
+}
+
+:deep(.level-table th.el-table__cell) {
+  background-color: rgba(10, 25, 50, 0.9) !important;
+  color: #40e0d0 !important;
+  border-bottom: 1px solid rgba(64,224,208,0.2) !important;
 }
 
 .cell-content {
@@ -1140,8 +1150,8 @@ const handleDelete = async (id: number) => {
 .history-table {
   --el-table-bg-color: transparent !important;
   --el-table-tr-bg-color: transparent !important;
-  --el-table-row-hover-bg-color: rgba(64, 224, 208, 0.1) !important;
-  --el-table-border-color: rgba(66, 58, 58, 0.1) !important;
+  --el-table-row-hover-bg-color: rgba(64, 224, 208, 0.08) !important;
+  --el-table-border-color: rgba(64, 224, 208, 0.12) !important;
   font-size: 14px;
   border-radius: 8px;
   overflow: hidden;
@@ -1153,59 +1163,64 @@ const handleDelete = async (id: number) => {
 }
 
 :deep(.el-table th.el-table__cell) {
-  background-color: rgba(171, 42, 42, 0.3) !important;
+  background-color: rgba(10, 25, 50, 0.9) !important;
   color: #40e0d0 !important;
-  border-bottom: 1px solid rgba(135, 117, 126, 0.3) !important;
+  border-bottom: 1px solid rgba(64,224,208,0.2) !important;
 }
 
 :deep(.el-table td.el-table__cell) {
-  border-bottom: 1px solid rgba(142, 163, 137, 0.1) !important;
+  border-bottom: 1px solid rgba(64,224,208,0.06) !important;
 }
-
 
 :deep(.el-table__row:nth-child(even)) {
-  background: rgba(255,255,255,0.9) !important;
-  color: #000 !important;
+  background: rgba(255,255,255,0.04) !important;
+  color: #e0e6ed !important;
 }
 :deep(.el-table__row:nth-child(odd)) {
-  background: rgba(0,0,0,0.15) !important;
-  color: #fff !important;
+  background: rgba(0,0,0,0.2) !important;
+  color: #e0e6ed !important;
 }
 
 :deep(.level-danger) {
-  background-color: rgba(229, 62, 62, 0.1) !important;
+  background-color: rgba(229, 62, 62, 0.08) !important;
 }
 :deep(.level-warning) {
-  background-color: rgba(237, 137, 54, 0.1) !important;
+  background-color: rgba(237, 137, 54, 0.08) !important;
 }
 :deep(.level-primary) {
-  background-color: rgba(236, 201, 75, 0.1) !important;
+  background-color: rgba(236, 201, 75, 0.06) !important;
 }
 :deep(.level-info) {
-  background-color: rgba(113, 128, 150, 0.1) !important;
+  background-color: rgba(113, 128, 150, 0.06) !important;
 }
 
 .gas-tag {
   border-radius: 4px;
   font-weight: 500;
-  color: #000000 !important;
 }
 
 .concentration-text {
   font-weight: 600;
-  color: #bda9a9;
+  color: #b8e8e4;
   font-size: 14px;
 }
 
+.concentration-text.danger-value {
+  color: #ff4d4f;
+  text-shadow: 0 0 8px rgba(255,77,79,0.4);
+}
+
 .level-tag {
-  width: 100px;
-  height: 32px;
-  line-height: 32px;
+  width: 80px;
+  height: 28px;
+  line-height: 28px;
   text-align: center;
   border-radius: 6px;
   font-weight: 600;
+  font-size: 13px;
   color: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: inline-block;
 }
 
 .level-tag.danger {
@@ -1222,12 +1237,12 @@ const handleDelete = async (id: number) => {
 }
 
 .level-tag.info {
-  background: linear-gradient(135deg, #718096 0%, #4a5568 100%);
+  background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
 }
 
 .delete-btn {
   border-radius: 6px;
-  padding: 6px 16px;
+  padding: 5px 12px;
   font-weight: 500;
   transition: all 0.2s ease;
   background: linear-gradient(90deg, #ff4d4f, #ff7875);
@@ -1244,19 +1259,22 @@ const handleDelete = async (id: number) => {
 }
 
 /* 图表样式 */
-.chart-card {
+.chart-card-inline {
   margin: 0 20px 20px;
-  padding: 15px;
+  padding: 20px;
+  background: rgba(10, 25, 50, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(64, 224, 208, 0.2);
+  border-radius: 12px;
 }
-.chart-item {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.chart-title {
-  font-size: 20px;
+.chart-title-bar {
+  font-size: 18px;
   font-weight: 600;
-  color: #333;
+  color: #40e0d0;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .chart-box {
   width: 100%;

@@ -6,22 +6,6 @@
     <el-tabs v-model="activeTab" class="integrated-tabs" @tab-click="handleTabClick">
       <!-- ========== Tab 1: 小车总览 ========== -->
       <el-tab-pane label="小车总览" name="overview">
-        <!-- 横向导航栏 -->
-        <nav class="nav-bar">
-          <ul>
-            <li @click="goToHome" :class="{ active: $route.name === 'EquipmentInspect' }">小车总览</li>
-            <li
-              v-for="car in carList"
-              :key="car.id"
-              @click="goToCarDetail(car.id)"
-              :class="{ active: $route.name === 'CarDetail' && $route.params.id === car.id.toString() }"
-            >
-              小车 {{ car.id }}
-              <span v-if="getCarStatus(car.id) === 'warning'" class="warning-dot"></span>
-            </li>
-          </ul>
-        </nav>
-
         <div class="content">
           <!-- 左侧气体浓度曲线 -->
           <div class="chart-group left-charts">
@@ -134,26 +118,27 @@
               :data="warningHistory"
               border
               stripe
-              :header-cell-style="{background: '#f5f7fa', color: '#303133', fontWeight: '600'}"
+              :header-cell-style="{background: 'rgba(10, 25, 50, 0.9)', color: '#40e0d0', fontWeight: '700', fontSize: '15px'}"
               class="warning-table"
-              max-height="400"
+              max-height="460"
+              row-key="id"
             >
-              <el-table-column prop="carId" label="小车编号" align="center" width="120" />
-              <el-table-column prop="areaName" label="所属区域" align="center" width="120" />
-              <el-table-column prop="gasType" label="气体类型" align="center" width="100">
+              <el-table-column prop="carId" label="小车编号" align="center" width="140" />
+              <el-table-column prop="areaName" label="所属区域" align="center" width="140" />
+              <el-table-column prop="gasType" label="气体类型" align="center" width="120">
                 <template #default="scope">
                   <el-tag size="small" :type="scope.row.gasType === 'ch4' ? 'danger' : 'warning'">
                     {{ scope.row.gasType }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="gasValue" label="浓度值" align="center" width="120" />
-              <el-table-column prop="warningTime" label="预警时间" align="center" width="180">
+              <el-table-column prop="gasValue" label="浓度值" align="center" width="140" />
+              <el-table-column prop="warningTime" label="预警时间" align="center" width="200">
                 <template #default="scope">
                   {{ formatWarningTime(scope.row.warningTime) }}
                 </template>
               </el-table-column>
-              <el-table-column label="关联操作" align="center" width="200">
+              <el-table-column label="关联操作" align="center" min-width="200">
                 <template #default="scope">
                   <el-button size="small" type="primary" @click="goToCarDetail(scope.row.carId)">
                     查看小车
@@ -391,9 +376,23 @@ const gasTypeMapping = {
 // ========== Tab 切换处理 ==========
 const handleTabClick = () => {
   if (activeTab.value === 'overview') {
-    nextTick(() => initCharts())
+    nextTick(() => {
+      initCharts()
+      // 等DOM完全渲染后强制resize，确保图表容器有稳定宽高
+      nextTick(() => {
+        chartInstances.value.forEach(inst => {
+          if (inst && typeof inst.resize === 'function') {
+            inst.resize()
+          }
+        })
+      })
+    })
   } else if (activeTab.value === 'alerts') {
-    nextTick(() => renderAlertsChart())
+    nextTick(() => {
+      renderAlertsChart()
+      // 柱状图同样resize确保铺满
+      alertsChart?.resize()
+    })
   }
 }
 
@@ -513,13 +512,17 @@ const handleResetCar = async (id: number) => {
 }
 
 // ========== 图表（小车总览） ==========
+// 独立的 resize 清理函数列表，不和 echarts 实例混在一起
+const chartResizeCleanups: (() => void)[] = []
+
 const initCharts = () => {
   if (!mapImgLoaded.value || !mapContainer.value) return
 
-  chartInstances.value.forEach(instance => {
-    if (instance.dispose) instance.dispose()
-  })
+  // 清理旧的图表和事件
+  chartInstances.value.forEach(chart => chart.dispose?.())
+  chartResizeCleanups.forEach(fn => fn())
   chartInstances.value = []
+  chartResizeCleanups.length = 0
 
   for (let i = 1; i <= 4; i++) {
     try {
@@ -572,12 +575,7 @@ const initCharts = () => {
 
       const resizeHandler = () => myChart.resize()
       window.addEventListener('resize', resizeHandler)
-      chartInstances.value.push({
-        dispose: () => {
-          window.removeEventListener('resize', resizeHandler)
-          myChart.dispose()
-        }
-      })
+      chartResizeCleanups.push(() => window.removeEventListener('resize', resizeHandler))
     } catch (error) {
       console.error(`初始化小车${i}图表失败：`, error)
     }
@@ -623,18 +621,23 @@ const renderAlertsChart = () => {
   const values = names.map(k => areaCount[k])
 
   alertsChart.setOption({
-    tooltip: { trigger: 'axis' },
-    grid: { left: '10%', right: '10%', bottom: '15%', top: '15%' },
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(0,20,40,0.9)', borderColor: '#40e0d0', textStyle: { color: '#fff', fontSize: 14 } },
+    grid: { left: '6%', right: '4%', bottom: '16%', top: '6%' },
     xAxis: {
       type: 'category',
       data: names,
-      axisLabel: { color: '#e0e6ed' },
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.2)' } }
+      boundaryGap: true,
+      axisLabel: { color: '#b8e8e4', fontSize: 16, fontWeight: 600, margin: 14 },
+      axisLine: { lineStyle: { color: 'rgba(64,224,208,0.4)', width: 2 } },
+      axisTick: { show: true, lineStyle: { color: 'rgba(64,224,208,0.3)' } },
+      splitLine: { show: false }
     },
     yAxis: {
       type: 'value',
-      axisLabel: { color: '#e0e6ed' },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+      axisLabel: { color: '#b8e8e4', fontSize: 15 },
+      splitLine: { lineStyle: { color: 'rgba(64,224,208,0.12)', type: 'dashed', width: 1 } },
+      axisLine: { show: true, lineStyle: { color: 'rgba(64,224,208,0.3)' } },
+      axisTick: { show: true }
     },
     series: [{
       type: 'bar',
@@ -644,10 +647,19 @@ const renderAlertsChart = () => {
           { offset: 0, color: '#409eff' },
           { offset: 1, color: '#40e0d0' }
         ]),
-        borderRadius: [4, 4, 0, 0]
+        borderRadius: [6, 6, 0, 0]
       },
-      barWidth: 40
-    }]
+      barWidth: '70%',
+      barMaxWidth: 150,
+      label: {
+        show: true,
+        position: 'top',
+        color: '#e0e6ed',
+        fontSize: 16,
+        fontWeight: 700
+      }
+    }],
+    backgroundColor: 'transparent'
   })
 }
 
@@ -687,12 +699,13 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  chartInstances.value.forEach(instance => {
-    if (instance.dispose) instance.dispose()
-  })
+  chartInstances.value.forEach(chart => chart.dispose?.())
+  chartResizeCleanups.forEach(fn => fn())
   chartInstances.value = []
+  chartResizeCleanups.length = 0
   mapImgLoaded.value = false
   alertsChart?.dispose()
+  alertsChart = null
 })
 </script>
 
@@ -763,10 +776,6 @@ onUnmounted(() => {
 }
 
 /* ===== Tab 公共 ===== */
-.tab-content {
-  min-height: 300px;
-}
-
 .tab-card {
   margin-bottom: 20px;
   background: rgba(10, 25, 50, 0.6);
@@ -790,51 +799,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-/* ===== 小车总览原有样式 ===== */
-.nav-bar {
-  width: 100%;
-  background: rgba(10, 25, 50, 0.8);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(64, 224, 208, 0.2);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-}
-.nav-bar ul {
-  list-style: none;
-  display: flex;
-  margin: 0;
-  padding: 0;
-}
-.nav-bar li {
-  padding: 15px 25px;
-  color: #e0e6ed;
-  cursor: pointer;
-  transition: all 0.3s;
-  position: relative;
-  font-weight: 500;
-}
-.nav-bar li.active {
-  color: #40e0d0;
-  background: rgba(64, 224, 208, 0.1);
-  box-shadow: inset 0 -3px 0 #40e0d0;
-}
-.nav-bar li:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
-}
-
-.warning-dot {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ff4d4f;
-  box-shadow: 0 0 8px #ff4d4f;
-  animation: blink 1s infinite;
 }
 
 .content {
@@ -1278,18 +1242,41 @@ onUnmounted(() => {
   --el-table-row-hover-bg-color: rgba(64, 224, 208, 0.1) !important;
   --el-table-border-color: rgba(66, 58, 58, 0.1) !important;
   border-radius: 8px;
+  width: 100%;
 }
 
 .warning-table :deep(.el-table__header th) {
-  background-color: rgba(10, 25, 50, 0.8) !important;
+  background-color: rgba(10, 25, 50, 0.9) !important;
   color: #40e0d0 !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  padding: 14px 0 !important;
+  border-bottom: 2px solid rgba(64, 224, 208, 0.3) !important;
 }
+
 .warning-table :deep(.el-table__row) {
-  background: rgba(0, 0, 0, 0.15) !important;
-  color: #fff !important;
+  background: rgba(0, 0, 0, 0.2) !important;
+  color: #e8ecef !important;
+  font-size: 14px;
 }
+
 .warning-table :deep(.el-table__row:nth-child(even)) {
-  background: rgba(255, 255, 255, 0.05) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.warning-table :deep(.el-table__row td) {
+  padding: 12px 0 !important;
+}
+
+.warning-table :deep(.el-table__row:hover td) {
+  background-color: rgba(64, 224, 208, 0.08) !important;
+}
+
+.warning-table :deep(.el-tag) {
+  font-size: 13px;
+  padding: 0 12px;
+  height: 28px;
+  line-height: 26px;
 }
 
 /* 智慧地图 Tab */
@@ -1464,10 +1451,29 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-/* 实时预警图表 */
+/* 实时预警 Tab 内容区 */
+.tab-content {
+  min-height: 300px;
+}
+
+.tab-content :deep(.tab-card) {
+  margin-bottom: 24px;
+}
+
+/* 图表卡片 - 突出显示 */
+.tab-card:has(.chart-box) {
+  background: rgba(10, 25, 50, 0.7);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid rgba(64, 224, 208, 0.25);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* 实时预警图表 - 大幅放大 */
 .chart-box {
   width: 100%;
-  height: 300px;
+  height: 620px;
+  min-height: 620px;
 }
 
 /* 响应式 */
