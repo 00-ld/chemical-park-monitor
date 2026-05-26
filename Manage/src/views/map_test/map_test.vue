@@ -525,6 +525,26 @@
               <i class="fas fa-minus-circle"></i> 删除此传感器
             </button>
           </div>
+          <!-- 设备安装详情卡片 -->
+          <div v-if="selectedSensor && sensorDeviceCard" class="sensor-device-card">
+            <div class="sensor-history-head">
+              <span>设备安装详情</span>
+              <button class="sensor-btn-white" @click="openDeviceFullscreen">
+                <i class="fas fa-expand"></i>
+              </button>
+            </div>
+            <div class="sensor-device-compact">
+              <img :src="sensorDeviceCard.image" class="sensor-device-thumb" />
+              <div class="sensor-device-compact-info">
+                <div class="sensor-device-compact-name">{{ sensorDeviceCard.deviceName }}</div>
+                <div class="sensor-device-compact-status">
+                  <span class="sensor-status-dot online"></span> 在线
+                  <span class="sensor-status-sep">|</span>
+                  <span class="sensor-conc-val">{{ sensorDeviceCard.concentration }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
           <div v-else-if="!selectedSensor" style="text-align:center;padding:40px 0;color:var(--fg-muted);font-size:13px;">
             <i class="fas fa-mouse-pointer" style="font-size:32px;opacity:0.2;display:block;margin-bottom:12px;"></i>
             点击地图上的设施查看详细信息
@@ -1135,6 +1155,66 @@
       </aside>
     </div>
 
+    <!-- 设备详情全屏浮层 -->
+    <Transition name="device-fullscreen">
+      <div v-if="deviceFullscreenVisible" class="device-fullscreen-overlay" @click.self="closeDeviceFullscreen">
+        <div class="device-fullscreen-card">
+          <button class="device-fullscreen-close" @click="closeDeviceFullscreen" title="关闭">
+            <i class="fas fa-times"></i>
+          </button>
+          <div class="device-fullscreen-img-wrap"
+               ref="deviceImgWrapRef"
+               @wheel.prevent="onDeviceImgWheel"
+               @mousedown="onDeviceImgDragStart"
+               @mousemove="onDeviceImgDragMove"
+               @mouseup="onDeviceImgDragEnd"
+               @mouseleave="onDeviceImgDragEnd"
+               @dblclick="onDeviceImgDblClick">
+            <img :src="deviceFullscreenData.image" class="device-fullscreen-img"
+                 :style="{ transform: `scale(${deviceImgZoom}) translate(${deviceImgPanX}px, ${deviceImgPanY}px)` }"
+                 draggable="false" />
+            <div class="device-img-zoom-bar">
+              <button class="df-zoom-btn" @click.stop="deviceImgZoomIn" title="放大"><i class="fas fa-plus"></i></button>
+              <span class="df-zoom-val">{{ Math.round(deviceImgZoom * 100) }}%</span>
+              <button class="df-zoom-btn" @click.stop="deviceImgZoomOut" title="缩小"><i class="fas fa-minus"></i></button>
+              <div class="df-zoom-divider"></div>
+              <button class="df-zoom-btn" @click.stop="deviceImgZoomReset" title="重置视图"><i class="fas fa-crosshairs"></i></button>
+            </div>
+            <div class="device-img-hint" v-if="deviceImgZoom <= 1">
+              <i class="fas fa-mouse-pointer"></i> 滚轮缩放 · 双击放大 · 拖拽平移
+            </div>
+          </div>
+          <div class="device-fullscreen-info">
+            <div class="df-info-head">
+              <div class="df-info-icon"><i class="fas fa-microchip"></i></div>
+              <div>
+                <div class="device-fullscreen-title">{{ deviceFullscreenData.deviceName }}</div>
+                <div class="df-info-subtitle">{{ deviceFullscreenData.location }}</div>
+              </div>
+            </div>
+            <div class="df-info-divider"></div>
+            <div class="device-fullscreen-row">
+              <span class="df-label"><i class="fas fa-signal df-label-icon"></i> 设备状态</span>
+              <span class="df-badge df-badge-online"><span class="df-badge-dot"></span>在线运行</span>
+            </div>
+            <div class="device-fullscreen-row">
+              <span class="df-label"><i class="fas fa-shield-halved df-label-icon"></i> 报警状态</span>
+              <span class="df-badge df-badge-safe"><i class="fas fa-check" style="font-size:9px;margin-right:2px;"></i>正常</span>
+            </div>
+            <div class="device-fullscreen-row">
+              <span class="df-label"><i class="fas fa-wave-square df-label-icon"></i> 实时浓度</span>
+              <span class="df-conc">{{ deviceFullscreenData.concentration }}</span>
+            </div>
+            <div class="df-info-divider"></div>
+            <div class="df-std-block">
+              <div class="df-std-head"><i class="fas fa-book-open"></i> 安装标准依据</div>
+              <div class="df-std-text">{{ deviceFullscreenData.standard }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- 传感器参数编辑浮层 -->
     <div v-if="sensorEditVisible" class="sensor-edit-overlay" @click.self="sensorEditVisible = false">
       <div class="sensor-edit-panel">
@@ -1222,6 +1302,7 @@ import {
   pipes,
   roads,
   sensorTypes,
+  getSensorDevice,
   stats,
   zones,
 } from '@/data/parkAssets'
@@ -1245,6 +1326,18 @@ const showFlow = ref(false)
 const showEntrances = ref(false)
 const showSensors = ref(true)
 const showSensorRanges = ref(true)
+// 预加载传感器设备图片
+const sensorDeviceImageCache = new Map()
+function getSensorDeviceImage(sensor) {
+  const device = getSensorDevice(sensor)
+  if (!device?.image) return null
+  if (sensorDeviceImageCache.has(device.image)) return sensorDeviceImageCache.get(device.image)
+  const img = new Image()
+  img.src = device.image
+  img.onload = () => render()
+  sensorDeviceImageCache.set(device.image, img)
+  return img
+}
 const measureMode = ref(false)
 const activeFilter = ref('all')
 const selectedZone = ref('')
@@ -1722,6 +1815,100 @@ const sensorSamplingSummary = computed(() => {
   return { sampled, warning, danger }
 })
 const selectedSensorHistoryChart = computed(() => buildSensorHistoryChart(selectedSensor.value))
+
+const sensorDeviceCard = computed(() => {
+  if (!selectedSensor.value) return null
+  const device = getSensorDevice(selectedSensor.value)
+  const concentration = getSensorCurrentConcentration(selectedSensor.value)
+  const zonePrefix = (selectedSensor.value.id || '').split('-')[0] || ''
+  const zoneNames = {
+    TK: '储罐区', TW: '塔器区', PA: '生产一区', PB: '精细化工区', P2: '生产二区',
+    UT: '公用工程区', WH: '仓储物流区', WT: '污水处理区', MN: '环境监测区',
+    MT: '机修维护区', FS: '消防设施区', FD: '防火堤', PL: '管道区', A: '行政办公区',
+  }
+  return {
+    ...device,
+    location: `${zoneNames[zonePrefix] || '园区'} / ${selectedSensor.value.id}`,
+    concentration: `${concentration.toFixed(2)} ppm`,
+  }
+})
+
+function zoomToSensor(sensor) {
+  if (!sensor || !canvasEl) return
+  const targetScale = 2.0
+  viewState.scale = targetScale
+  viewState.offsetX = canvasEl.width / 2 / targetScale - sensor.x
+  viewState.offsetY = canvasEl.height / 2 / targetScale - sensor.y
+  render()
+}
+
+const deviceFullscreenVisible = ref(false)
+const deviceImgZoom = ref(1)
+const deviceImgPanX = ref(0)
+const deviceImgPanY = ref(0)
+const deviceImgDragging = ref(false)
+const deviceImgDragStartX = ref(0)
+const deviceImgDragStartY = ref(0)
+const deviceImgPanStartX = ref(0)
+const deviceImgPanStartY = ref(0)
+const deviceImgWrapRef = ref(null)
+const deviceFullscreenData = computed(() => {
+  if (!selectedSensor.value) return {}
+  const card = sensorDeviceCard.value
+  if (!card) return {}
+  return { ...card }
+})
+function openDeviceFullscreen() {
+  deviceFullscreenVisible.value = true
+  deviceImgZoom.value = 1
+  deviceImgPanX.value = 0
+  deviceImgPanY.value = 0
+}
+function closeDeviceFullscreen() {
+  deviceFullscreenVisible.value = false
+}
+function onDeviceImgWheel(e) {
+  const delta = e.deltaY > 0 ? -0.1 : 0.1
+  deviceImgZoom.value = Math.max(0.5, Math.min(5, deviceImgZoom.value + delta))
+}
+function onDeviceImgDragStart(e) {
+  if (deviceImgZoom.value <= 1) return
+  deviceImgDragging.value = true
+  deviceImgDragStartX.value = e.clientX
+  deviceImgDragStartY.value = e.clientY
+  deviceImgPanStartX.value = deviceImgPanX.value
+  deviceImgPanStartY.value = deviceImgPanY.value
+}
+function onDeviceImgDragMove(e) {
+  if (!deviceImgDragging.value) return
+  const dx = (e.clientX - deviceImgDragStartX.value) / deviceImgZoom.value
+  const dy = (e.clientY - deviceImgDragStartY.value) / deviceImgZoom.value
+  deviceImgPanX.value = deviceImgPanStartX.value + dx
+  deviceImgPanY.value = deviceImgPanStartY.value + dy
+}
+function onDeviceImgDragEnd() {
+  deviceImgDragging.value = false
+}
+function onDeviceImgDblClick() {
+  if (deviceImgZoom.value > 1) {
+    deviceImgZoom.value = 1
+    deviceImgPanX.value = 0
+    deviceImgPanY.value = 0
+  } else {
+    deviceImgZoom.value = 2.5
+  }
+}
+function deviceImgZoomIn() {
+  deviceImgZoom.value = Math.min(5, deviceImgZoom.value + 0.3)
+}
+function deviceImgZoomOut() {
+  deviceImgZoom.value = Math.max(0.5, deviceImgZoom.value - 0.3)
+}
+function deviceImgZoomReset() {
+  deviceImgZoom.value = 1
+  deviceImgPanX.value = 0
+  deviceImgPanY.value = 0
+}
 const sensorEditorState = reactive({
   currentFrameConcentration: 0,
   fillAllConcentration: 0,
@@ -4464,7 +4651,7 @@ function seedDemoSensors() {
 }
 /**
  * 手动新增传感器
- * 统一使用 'gas' 类型（四气方尊传感器），priority 由 computeSensorRisk 自动计算
+ * 统一使用 'gas' 类型（多种气体传感器），priority 由 computeSensorRisk 自动计算
  */
 function placeManualSensorAtPoint(point, sensorConfig = getNormalizedManualSensorDraft()) {
   const normalizedPoint = normalizeMapPoint(point)
@@ -4474,7 +4661,7 @@ function placeManualSensorAtPoint(point, sensorConfig = getNormalizedManualSenso
     installationHeight: sensorConfig.installationHeight || 1.5,
   }
   const { risk: riskVal, priority } = computeSensorRisk(tempSensor, nearestFacility)
-  // 统一使用 gas 类型（四气方尊传感器，支持 CO/可燃气体/H₂S/O₂）
+  // 统一使用 gas 类型（多种气体传感器，支持 CO/可燃气体/H₂S/O₂）
   // 使用工程命名生成传感器编号
   let areaType = 'tank', zone = 'tank_farm', isPumpArea = false
   for (const f of facilities) {
@@ -5289,7 +5476,6 @@ function drawSensors() {
     ctx.beginPath()
     ctx.arc(s.x, s.y, 3 / ss, 0, Math.PI * 2)
     ctx.fill()
-
   })
 }
 function sensorHitTest(wx, wy) {
@@ -5320,7 +5506,7 @@ function showSensorInfo(s){
   infoTitle.value = `${s.id}（${priorityLabel}）`
   infoSubtitle.value = `<span class="tag tag-blue">${type.name}</span><span style="color:var(--fg-muted);font-size:12px;margin-left:4px;">${modeLabel}</span>`
   infoRows.value = [
-    { key:'传感器类型', val: '四气方尊传感器' },
+    { key:'传感器类型', val: '多种气体传感器' },
     { key:'安装高度', val: `${installationHeight.toFixed(1)} m` },
     { key:'有效监测范围', val: `${effectiveRange} m` },
     { key:'检测范围', val: detectionRange },
@@ -5992,6 +6178,436 @@ watch(
   fill: #00e5a0;
   stroke: #ffffff;
   stroke-width: 1;
+}
+/* 设备安装详情卡片 - 侧边栏紧凑版 */
+.sensor-device-card {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #161f2d;
+  padding: 10px 12px;
+}
+.sensor-btn-white {
+  background: #ffffff;
+  color: #1a1a2e;
+  border: none;
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 11px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.sensor-btn-white:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 8px rgba(255,255,255,0.3);
+}
+.sensor-device-compact {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+}
+.sensor-device-thumb {
+  flex: 0 0 56px;
+  width: 56px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.sensor-device-compact-info {
+  flex: 1;
+  min-width: 0;
+}
+.sensor-device-compact-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sensor-device-compact-status {
+  font-size: 11px;
+  color: var(--fg-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sensor-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.sensor-status-dot.online { background: #00e5a0; }
+.sensor-status-sep { opacity: 0.3; }
+.sensor-conc-val { color: #00e5a0; font-weight: 500; }
+
+/* 设备详情全屏浮层 */
+.device-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: radial-gradient(ellipse at 30% 40%, rgba(0,229,160,0.06) 0%, rgba(0,0,0,0.88) 60%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+}
+.device-fullscreen-card {
+  position: relative;
+  display: flex;
+  max-width: 1200px;
+  width: 94vw;
+  max-height: 90vh;
+  background: linear-gradient(135deg, #141e2b 0%, #1a2738 50%, #162030 100%);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 32px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.device-fullscreen-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.7);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.device-fullscreen-close:hover {
+  background: rgba(239,68,68,0.25);
+  border-color: rgba(239,68,68,0.3);
+  color: #ef4444;
+  transform: rotate(90deg);
+}
+.device-fullscreen-img-wrap {
+  flex: 0 0 65%;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #060a12;
+  position: relative;
+  cursor: grab;
+  user-select: none;
+}
+.device-fullscreen-img-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    linear-gradient(180deg, rgba(6,10,18,0.5) 0%, transparent 15%, transparent 85%, rgba(6,10,18,0.6) 100%),
+    linear-gradient(90deg, rgba(6,10,18,0.3) 0%, transparent 10%, transparent 90%, rgba(6,10,18,0.3) 100%);
+}
+.device-fullscreen-img-wrap::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  z-index: 3;
+  border-radius: 0;
+  border: 1px solid transparent;
+  background: linear-gradient(135deg, rgba(0,229,160,0.12), transparent 40%, transparent 60%, rgba(56,189,248,0.08)) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+.device-fullscreen-img-wrap:active { cursor: grabbing; }
+.device-fullscreen-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.25s cubic-bezier(0.33,1,0.68,1);
+  transform-origin: center center;
+  filter: brightness(1.02) contrast(1.03);
+}
+.device-img-zoom-bar {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(8,12,20,0.8);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border-radius: 14px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+  z-index: 5;
+}
+.df-zoom-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,0.5);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.df-zoom-btn:hover {
+  background: rgba(0,229,160,0.12);
+  color: #00e5a0;
+  transform: scale(1.08);
+}
+.df-zoom-btn:active { transform: scale(0.95); }
+.df-zoom-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255,255,255,0.07);
+  margin: 0 4px;
+}
+.df-zoom-val {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.3px;
+}
+.device-img-hint {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.25);
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(12px);
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.05);
+  z-index: 5;
+  pointer-events: none;
+  letter-spacing: 0.3px;
+}
+.device-img-hint i {
+  margin-right: 5px;
+  color: rgba(0,229,160,0.4);
+}
+
+/* 信息面板 */
+.device-fullscreen-info {
+  flex: 1;
+  padding: 36px 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  min-width: 0;
+}
+.df-info-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+.df-info-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(0,229,160,0.12), rgba(56,189,248,0.08));
+  border: 1px solid rgba(0,229,160,0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #00e5a0;
+  font-size: 22px;
+  flex-shrink: 0;
+  box-shadow: 0 0 20px rgba(0,229,160,0.08), inset 0 1px 0 rgba(255,255,255,0.05);
+  position: relative;
+}
+.df-info-icon::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 18px;
+  background: radial-gradient(circle, rgba(0,229,160,0.08), transparent 70%);
+  pointer-events: none;
+}
+.device-fullscreen-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.3;
+  letter-spacing: -0.5px;
+}
+.df-info-subtitle {
+  font-size: 12px;
+  color: rgba(255,255,255,0.3);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.df-info-subtitle::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+}
+.df-info-divider {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
+  margin: 18px 0;
+}
+.device-fullscreen-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  padding: 12px 0;
+}
+.df-label {
+  color: rgba(255,255,255,0.4);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.df-label-icon {
+  font-size: 13px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.df-label-icon.fa-signal {
+  background: rgba(0,229,160,0.1);
+  color: #00e5a0;
+}
+.df-label-icon.fa-shield-halved {
+  background: rgba(56,189,248,0.1);
+  color: #38bdf8;
+}
+.df-label-icon.fa-wave-square {
+  background: rgba(168,85,247,0.1);
+  color: #a855f7;
+}
+.df-badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.df-badge-online {
+  background: rgba(0,229,160,0.08);
+  color: #00e5a0;
+  border: 1px solid rgba(0,229,160,0.12);
+  box-shadow: 0 0 12px rgba(0,229,160,0.06);
+}
+.df-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #00e5a0;
+  box-shadow: 0 0 6px rgba(0,229,160,0.5);
+  animation: df-pulse 2s ease-in-out infinite;
+}
+@keyframes df-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(0,229,160,0.5), 0 0 0 0 rgba(0,229,160,0.3); }
+  50% { opacity: 0.75; box-shadow: 0 0 4px rgba(0,229,160,0.3), 0 0 0 5px rgba(0,229,160,0); }
+}
+.df-badge-safe {
+  background: rgba(56,189,248,0.08);
+  color: #38bdf8;
+  border: 1px solid rgba(56,189,248,0.12);
+  box-shadow: 0 0 12px rgba(56,189,248,0.06);
+}
+.df-conc {
+  font-family: 'JetBrains Mono', 'Orbitron', monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: #00e5a0;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 12px rgba(0,229,160,0.2);
+}
+.df-std-block {
+  background: linear-gradient(135deg, rgba(56,189,248,0.03), rgba(168,85,247,0.02));
+  border: 1px solid rgba(56,189,248,0.06);
+  border-radius: 12px;
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+}
+.df-std-block::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(180deg, #38bdf8, #a855f7);
+  border-radius: 0 2px 2px 0;
+}
+.df-std-head {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.df-std-head i { font-size: 11px; color: #38bdf8; }
+.df-std-text {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  line-height: 1.7;
+  padding-left: 2px;
+}
+
+/* 全屏浮层动画 */
+.device-fullscreen-enter-active { transition: opacity 0.3s ease; }
+.device-fullscreen-leave-active { transition: opacity 0.2s ease; }
+.device-fullscreen-enter-from,
+.device-fullscreen-leave-to { opacity: 0; }
+.device-fullscreen-enter-active .device-fullscreen-card {
+  transition: transform 0.35s cubic-bezier(0.16,1,0.3,1), opacity 0.3s ease;
+}
+.device-fullscreen-enter-from .device-fullscreen-card {
+  transform: scale(0.93) translateY(12px);
+  opacity: 0;
+}
+.device-fullscreen-enter-active .device-fullscreen-card {
+  transition: transform 0.3s cubic-bezier(0.16,1,0.3,1);
+}
+.device-fullscreen-enter-from .device-fullscreen-card {
+  transform: scale(0.92);
 }
 .info-row {
   display: flex; justify-content: space-between; align-items: center;
