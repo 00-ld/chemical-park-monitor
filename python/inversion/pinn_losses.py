@@ -45,7 +45,8 @@ def gaussian_plume_predict(
         sensor_x: Sensor X coordinate in map pixels.
         sensor_y: Sensor Y coordinate in map pixels.
         wind_speed: Wind speed in m/s.
-        wind_direction_deg: Wind direction in degrees (FROM direction).
+        wind_direction_deg: Wind direction in degrees. In screen coordinates (y-down):
+            0=east, 90=south. Used as transport direction in the plume model.
         emission_rate: Source emission rate Q (default 1.0 for normalized).
 
     Returns:
@@ -182,11 +183,16 @@ def compute_pde_loss(center: Dict, scenario: Dict, sensors: Sequence[Dict]) -> f
             signal = float(sensor.get("signal", 0.0))
             residual += abs(along) / 120.0 * (1.0 + signal * 0.5)
         else:
-            # Downwind: penalize large cross-wind spread relative to distance
             if distance > 0:
                 cross_ratio = abs(cross) / distance
                 if cross_ratio > 0.6:
                     residual += (cross_ratio - 0.6) * 0.8
+                along_m = along * MAP_METERS_PER_UNIT
+                if along_m > 10:
+                    signal = float(sensor.get("signal", 0.0))
+                    expected_max = 1.0 / math.sqrt(along_m)
+                    if signal > expected_max * 2:
+                        residual += (signal - expected_max * 2) * 0.2
     return residual / max(len(sensors), 1)
 
 
@@ -203,6 +209,59 @@ def compute_source_regularization(center: Dict, candidate_center: Dict, candidat
     """
     distance = math.hypot(center["x"] - candidate_center["x"], center["y"] - candidate_center["y"])
     return distance / max(candidate_radius, 1.0)
+
+
+def compute_arrival_time_loss(center: Dict, sensors: Sequence[Dict], scenario: Dict) -> float:
+    """Compute arrival time loss for locating the initial leak point.
+
+    Gas travels at approximately wind speed. The time when gas first
+    arrives at a sensor is proportional to its distance from the source.
+    Uses relative arrival times to constrain source location independently
+    of emission rate and detection threshold.
+
+    Requires at least 3 sensors with arrival time data for reliable
+    triangulation. Returns 0.0 if insufficient data.
+
+    Args:
+        center: Candidate source center dict with 'x' and 'y'.
+        sensors: List of active sensor dicts with arrivalTimeSec.
+        scenario: Scenario dict with windSpeed and windDirection.
+
+    Returns:
+        Normalized arrival time residual loss.
+    """
+    wind_speed = max(float(scenario.get("windSpeed") or 1.0), 0.5)
+
+    timed_sensors = []
+    for sensor in sensors:
+        arrival_sec = sensor.get("arrivalTimeSec")
+        if arrival_sec is not None:
+            timed_sensors.append((sensor, float(arrival_sec)))
+
+    if len(timed_sensors) < 3:
+        return 0.0
+
+    earliest_observed = min(arr for _, arr in timed_sensors)
+
+    expected_distances = []
+    for sensor, _ in timed_sensors:
+        dx = sensor["mapPoint"]["x"] - center["x"]
+        dy = sensor["mapPoint"]["y"] - center["y"]
+        expected_distances.append(math.hypot(dx, dy) * MAP_METERS_PER_UNIT)
+
+    min_expected_dist = min(expected_distances)
+
+    residual = 0.0
+    for i, (sensor, arrival_sec) in enumerate(timed_sensors):
+        expected_rel_time = (expected_distances[i] - min_expected_dist) / wind_speed
+        observed_rel_time = arrival_sec - earliest_observed
+        if observed_rel_time > 0 and expected_rel_time > 0:
+            ratio = expected_rel_time / observed_rel_time
+            residual += abs(ratio - 1.0)
+        elif observed_rel_time <= 0 and expected_rel_time > 1.0:
+            residual += 1.0
+
+    return residual / len(timed_sensors)
 
 
 def combine_losses(losses: Dict[str, float], weights: Dict[str, float]) -> float:
@@ -224,8 +283,9 @@ def combine_losses(losses: Dict[str, float], weights: Dict[str, float]) -> float
 def compute_loss_snapshot(center: Dict, candidate: Dict, sensors: Sequence[Dict], scenario: Dict) -> Dict[str, float]:
     """Compute a complete loss snapshot for a candidate source location.
 
-    Combines observation, PDE, and source regularization losses with
-    default weights.
+    Combines observation, PDE, source regularization, and arrival time
+    losses with default weights. Arrival time is the primary constraint
+    for locating the initial leak point.
 
     Args:
         center: Candidate source center to evaluate.
@@ -234,26 +294,30 @@ def compute_loss_snapshot(center: Dict, candidate: Dict, sensors: Sequence[Dict]
         scenario: Scenario dict with wind data.
 
     Returns:
-        Dictionary with obs, pde, src, and total loss values.
+        Dictionary with obs, pde, src, arrival, and total loss values.
     """
     obs_loss = compute_observation_loss(center, sensors, scenario)
     pde_loss = compute_pde_loss(center, scenario, sensors)
     src_loss = compute_source_regularization(center, candidate["center"], float(candidate.get("radius") or 45))
+    arrival_loss = compute_arrival_time_loss(center, sensors, scenario)
     total_loss = combine_losses(
         {
             "obs": obs_loss,
             "pde": pde_loss,
             "src": src_loss,
+            "arrival": arrival_loss,
         },
         {
-            "obs": 1.0,
-            "pde": 0.55,
-            "src": 0.35,
+            "obs": 0.50,
+            "pde": 0.30,
+            "src": 0.10,
+            "arrival": 0.35,
         },
     )
     return {
         "obs": round(obs_loss, 4),
         "pde": round(pde_loss, 4),
         "src": round(src_loss, 4),
+        "arrival": round(arrival_loss, 4),
         "total": round(total_loss, 4),
     }

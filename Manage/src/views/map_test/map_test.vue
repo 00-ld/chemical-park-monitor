@@ -269,6 +269,7 @@
       </aside>
 
       <main class="map-container" ref="mapContainerRef">
+        <template v-if="viewMode === '2d'">
         <div class="grid-overlay"></div>
         <canvas
             ref="mapCanvasRef"
@@ -323,12 +324,6 @@
           </button>
           <button class="tool-btn" :class="{ active: showSensorRanges }" @click="toggleSensorRanges">
             <i class="fas fa-circle"></i> 半径范围
-          </button>
-          <button class="tool-btn" :class="{ active: showCars }" @click="toggleCars" title="显示/隐藏巡检小车">
-            <i class="fas fa-truck"></i> 小车
-          </button>
-          <button class="tool-btn" :class="{ active: carPatrolEnabled }" @click="toggleCarPatrol" title="启动/停止小车巡逻">
-            <i class="fas fa-route"></i> 巡逻
           </button>
           <button class="tool-btn" @click="runEndToEndPipeline" title="全流程联动：巡逻→采样→PINN溯源">
             <i class="fas fa-play-circle"></i> 全流程
@@ -387,6 +382,14 @@
           <button class="map-btn" @click="zoomReset" title="重置"><i class="fas fa-expand"></i></button>
           <button class="map-btn" :class="{ active: showLabels }" @click="toggleLabels" title="标注"><i class="fas fa-tag"></i></button>
         </div>
+        </template>
+
+        <ParkScene3D
+            v-if="viewMode === '3d'"
+            ref="scene3DRef"
+            :selected-facility-id="selectedFacility?.id"
+            @facility-click="(id) => { selectedFacility = facilityById.get(id) || null }"
+        />
       </main>
 
       <aside class="right-panel" :class="{ collapsed: panelCollapsed }">
@@ -1267,7 +1270,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   PHASE1_DEFAULT_SCENARIO,
@@ -1309,6 +1312,7 @@ import {
 import { CAR_PATROL_ROUTES } from '@/data/carPatrolRoutes'
 
 import { useCarStore } from '@/store/carStore'
+import ParkScene3D from './components/ParkScene3D.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -1326,6 +1330,8 @@ const showFlow = ref(false)
 const showEntrances = ref(false)
 const showSensors = ref(true)
 const showSensorRanges = ref(true)
+const viewMode = ref<'2d' | '3d'>('2d')
+const scene3DRef = ref<InstanceType<typeof ParkScene3D>>()
 // 预加载传感器设备图片
 const sensorDeviceImageCache = new Map()
 function getSensorDeviceImage(sensor) {
@@ -5069,6 +5075,10 @@ function updateCarPatrol(deltaMs) {
 }
 
 function animate(timestamp = 0) {
+  if (viewMode.value === '3d') {
+    animFrameId = requestAnimationFrame(animate)
+    return
+  }
   const deltaMs = lastAnimTime ? timestamp - lastAnimTime : 16
   lastAnimTime = timestamp
   flowAnimOffset += 0.8
@@ -5610,6 +5620,20 @@ onMounted(() => {
   setTimeout(() => {
     autoConfigFromCarParams()
   }, 500)
+})
+
+watch(viewMode, (mode) => {
+  if (mode === '2d') {
+    // Re-acquire canvas ref after template switch
+    nextTick(() => {
+      canvasEl = mapCanvasRef.value
+      if (canvasEl) {
+        ctx = canvasEl.getContext('2d')
+        resizeCanvas()
+        render()
+      }
+    })
+  }
 })
 
 onUnmounted(() => {

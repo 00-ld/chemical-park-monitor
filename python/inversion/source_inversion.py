@@ -144,16 +144,23 @@ def run_two_stage_inversion(dataset: Dict) -> Dict:
 
     weighted_center = estimate_weighted_center(active_sensors, candidate_regions[0]["center"])
     ranked_candidates = rank_candidates(candidate_regions, active_sensors, dataset.get("scenario") or {}, weighted_center)
-    best_candidate = ranked_candidates[0]
-    refinement = refine_candidate(
-        candidate=best_candidate,
-        sensors=active_sensors,
-        scenario=dataset.get("scenario") or {},
-        weighted_center=weighted_center,
-        training_config=dataset.get("trainingConfig") or {},
-        gas=dataset.get("gas") or {},
-        true_source_map_point=dataset.get("trueSourceMapPoint"),
-    )
+
+    top_k = min(len(ranked_candidates), int((dataset.get("trainingConfig") or {}).get("topK", 4) or 4))
+    refined_results = []
+    for candidate in ranked_candidates[:top_k]:
+        refinement = refine_candidate(
+            candidate=candidate,
+            sensors=active_sensors,
+            scenario=dataset.get("scenario") or {},
+            weighted_center=weighted_center,
+            training_config=dataset.get("trainingConfig") or {},
+            gas=dataset.get("gas") or {},
+            true_source_map_point=dataset.get("trueSourceMapPoint"),
+        )
+        refined_results.append((candidate, refinement))
+
+    best_pair = min(refined_results, key=lambda pair: pair[1]["errorMetrics"]["finalLoss"])
+    best_candidate, refinement = best_pair
 
     return {
         "datasetVersion": "pyodide-pinn-inversion-v1",
@@ -285,10 +292,10 @@ def refine_candidate(
     wind_direction = float(scenario.get("windDirection") or 0)
     candidate_center = candidate["center"]
     candidate_radius = float(candidate.get("radius") or 45)
-    bounds_min_x = candidate_center["x"] - candidate_radius * 2.5
-    bounds_max_x = candidate_center["x"] + candidate_radius * 2.5
-    bounds_min_y = candidate_center["y"] - candidate_radius * 2.5
-    bounds_max_y = candidate_center["y"] + candidate_radius * 2.5
+    bounds_min_x = candidate_center["x"] - candidate_radius * 4
+    bounds_max_x = candidate_center["x"] + candidate_radius * 4
+    bounds_min_y = candidate_center["y"] - candidate_radius * 4
+    bounds_max_y = candidate_center["y"] + candidate_radius * 4
 
     def objective(x, y):
         x_clamped = max(bounds_min_x, min(bounds_max_x, x))

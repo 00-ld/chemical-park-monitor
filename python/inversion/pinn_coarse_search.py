@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from typing import Dict, List
 
-from .pinn_dataset import normalize_coarse_search_payload
+from .pinn_dataset import normalize_coarse_search_payload, pick_arrival_frame
 from .pinn_losses import fit_emission_rate, gaussian_plume_predict
 
 MAP_METERS_PER_UNIT = 0.5
@@ -99,10 +99,40 @@ def run_coarse_search(payload: Dict) -> Dict:
 
             normalized_error = weighted_error / len(sensors)
             support_ratio = support_count / len(sensors)
-            score = round(
-                influence_score / len(sensors) + support_ratio * 0.4 - normalized_error * 0.7,
-                4,
+            shape_score = influence_score / len(sensors) + support_ratio * 0.4 - normalized_error * 0.7
+
+            abs_scale = max_observed / max_predicted
+            abs_predicted = [p * abs_scale for p in raw_predictions]
+            abs_error_sum = sum(abs(abs_predicted[i] - sensors[i]["observedSignal"]) for i in range(len(sensors)))
+            abs_error = abs_error_sum / len(sensors) / max_observed
+            abs_score = max(0.0, 1.0 - abs_error)
+
+            arrival_score = 0.0
+            timed_count = 0
+            earliest_arrival = min(
+                (s.get("arrivalTimeSec") for s in sensors if s.get("arrivalTimeSec") is not None),
+                default=None,
             )
+            if earliest_arrival is not None:
+                for sensor in sensors:
+                    arrival_sec = sensor.get("arrivalTimeSec")
+                    if arrival_sec is None:
+                        continue
+                    timed_count += 1
+                    dist_m = math.hypot(sensor["x"] - x, sensor["y"] - y) * MAP_METERS_PER_UNIT
+                    expected_time = dist_m / max(wind_speed, 0.5)
+                    observed_time = arrival_sec - earliest_arrival
+                    if observed_time > 0:
+                        time_ratio = expected_time / observed_time
+                        arrival_score += max(0.0, 1.0 - abs(time_ratio - 1.0))
+                if timed_count > 0:
+                    arrival_score = arrival_score / timed_count
+                else:
+                    arrival_score = shape_score
+            else:
+                arrival_score = shape_score
+
+            score = round(shape_score * 0.25 + abs_score * 0.25 + arrival_score * 0.50, 4)
             candidates.append(
                 {
                     "mapPoint": {"x": x, "y": y},
@@ -181,8 +211,10 @@ def build_active_sensors(sensors: List[Dict], current_frame_index: int, min_obse
     for sensor in sensors:
         sampled_series = sensor.get("sampledSeries") or []
         current_concentration = pick_sampled_concentration(sampled_series, current_frame_index)
-        peak = float(sensor.get("sampledPeak") or current_concentration or 0)
-        observed_signal = peak * 0.65 + current_concentration * 0.35
+        arrival_frame = pick_arrival_frame(sampled_series)
+        arrival_time_sec = None
+        if arrival_frame is not None and arrival_frame < len(sampled_series):
+            arrival_time_sec = float(sampled_series[arrival_frame].get("timeSec") or 0)
         active_sensors.append(
             {
                 "id": sensor.get("id", ""),
@@ -190,7 +222,9 @@ def build_active_sensors(sensors: List[Dict], current_frame_index: int, min_obse
                 "x": float(sensor.get("x") if sensor.get("x") is not None else sensor.get("mapPoint", {}).get("x", 0)),
                 "y": float(sensor.get("y") if sensor.get("y") is not None else sensor.get("mapPoint", {}).get("y", 0)),
                 "currentConcentration": round(current_concentration, 2),
-                "observedSignal": round(observed_signal, 2),
+                "observedSignal": round(current_concentration, 2),
+                "arrivalFrame": arrival_frame,
+                "arrivalTimeSec": arrival_time_sec,
             }
         )
 

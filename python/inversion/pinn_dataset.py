@@ -144,6 +144,31 @@ def normalize_coarse_search_payload(payload: Dict) -> Dict:
     }
 
 
+def pick_arrival_frame(sampled_series: Sequence[Dict], threshold_ratio: float = 0.01) -> Optional[int]:
+    """Find the first frame where concentration exceeds a threshold.
+
+    The threshold is peak_concentration * threshold_ratio. This marks
+    the approximate arrival time of the gas front at the sensor.
+
+    Args:
+        sampled_series: List of frame dicts with 'concentration'.
+        threshold_ratio: Fraction of peak to use as arrival threshold.
+
+    Returns:
+        Frame index of first arrival, or None if no valid data.
+    """
+    if not sampled_series:
+        return None
+    peak = max((item.get("concentration") or 0) for item in sampled_series)
+    if peak <= 0:
+        return None
+    threshold = peak * threshold_ratio
+    for i, item in enumerate(sampled_series):
+        if (item.get("concentration") or 0) >= threshold:
+            return i
+    return None
+
+
 def build_active_sensors(
     sensors: Optional[Sequence[Dict]],
     fallback_sensors: Sequence[Dict],
@@ -169,9 +194,14 @@ def build_active_sensors(
     else:
         normalized = []
         for sensor in fallback_sensors:
-            current = pick_sampled_concentration(sensor.get("sampledSeries") or [], current_frame_index)
+            sampled_series = sensor.get("sampledSeries") or []
+            current = pick_sampled_concentration(sampled_series, current_frame_index)
             peak = float(sensor.get("sampledPeak") or current or 0)
-            signal = peak * 0.55 + current * 0.45
+            signal = current
+            arrival_frame = pick_arrival_frame(sampled_series)
+            arrival_time_sec = None
+            if arrival_frame is not None and arrival_frame < len(sampled_series):
+                arrival_time_sec = float(sampled_series[arrival_frame].get("timeSec") or 0)
             normalized.append(
                 {
                     "id": sensor.get("id", ""),
@@ -181,6 +211,8 @@ def build_active_sensors(
                     "currentConcentration": round(current, 2),
                     "sampledPeak": round(peak, 2),
                     "signal": round(signal, 2),
+                    "arrivalFrame": arrival_frame,
+                    "arrivalTimeSec": arrival_time_sec,
                 }
             )
 
@@ -208,6 +240,8 @@ def normalize_active_sensor(sensor: Dict) -> Dict:
         "currentConcentration": round(float(sensor.get("currentConcentration") or 0), 2),
         "sampledPeak": round(float(sensor.get("sampledPeak") or 0), 2),
         "signal": round(float(sensor.get("signal") or 0), 2),
+        "arrivalFrame": sensor.get("arrivalFrame"),
+        "arrivalTimeSec": sensor.get("arrivalTimeSec"),
     }
 
 
