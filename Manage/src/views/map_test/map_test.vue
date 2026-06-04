@@ -368,7 +368,11 @@
         <div class="info-header">
           <div>
             <h2>{{ infoTitle }}</h2>
-            <div style="margin-top:4px;" v-html="infoSubtitle"></div>
+            <div style="margin-top:4px;">
+              <span v-if="infoSubtitle.text" :style="{ color: infoSubtitle.color }">{{ infoSubtitle.text }}</span>
+              <span v-if="infoSubtitle.tag" :class="infoSubtitle.tagClass" style="margin-left:4px;">{{ infoSubtitle.tag }}</span>
+              <span v-if="infoSubtitle.desc" style="color:var(--fg-muted);font-size:12px;margin-left:4px;">{{ infoSubtitle.desc }}</span>
+            </div>
           </div>
           <button class="close-btn" @click="closeInfo"><i class="fas fa-times"></i></button>
         </div>
@@ -376,8 +380,11 @@
           <template v-if="selectedFacility || selectedSensor || selectedCar">
             <div v-for="(row, idx) in infoRows" :key="idx" class="info-row">
               <span class="info-key">{{ row.key }}</span>
-              <span class="info-val" v-if="row.isHtml" v-html="row.val"></span>
-              <span class="info-val" v-else>{{ row.val }}</span>
+              <span class="info-val" v-if="row.action" @click="row.action" style="cursor:pointer;">
+                <button class="info-car-btn" :class="row.btnClass">{{ row.val }}</button>
+              </span>
+              <span class="info-val" v-else-if="row.tag" :class="row.tagClass">{{ row.val }}</span>
+              <span class="info-val" v-else :style="row.style || {}">{{ row.val }}</span>
             </div>
             <!-- YOLO 检测结果 -->
             <div v-if="selectedCar && yoloResult && yoloResult.carId === selectedCar.id" class="yolo-result-card">
@@ -1488,7 +1495,7 @@ function navigateToCarDetail(carId) {
 
 function showCarInfo(car) {
   infoTitle.value = `小车 ${car.id}`
-  infoSubtitle.value = `<span style="color:${car.status === 'warning' ? '#ef4444' : '#00e5a0'}">● ${car.status === 'warning' ? '异常' : '正常'}</span>`
+  infoSubtitle.value = { text: `● ${car.status === 'warning' ? '异常' : '正常'}`, color: car.status === 'warning' ? '#ef4444' : '#00e5a0' }
   const gasName = ['', '可燃气体 (CH₄)', '有毒气体 (H₂S)', 'CO气体', '氧气 (O₂)'][car.id] || '--'
   const threshold = carStore.gasThreshold[car.id]
   const thresholdText = threshold
@@ -1502,18 +1509,17 @@ function showCarInfo(car) {
     { key: '监测气体', val: gasName },
     { key: '状态', val: car.status === 'warning' ? '⚠ 预警' : '✓ 正常' },
     { key: '报警阈值', val: thresholdText },
-    { key: '操作', val: `<button class="info-car-btn" onclick="window.__navigateToCarDetail(${car.id})">查看详情 →</button>`, isHtml: true },
-    { key: '设警', val: `<button class="info-car-btn warning-btn" onclick="window.__toggleCarWarning(${car.id})">${car.status === 'warning' ? '重置状态' : '设警'}</button>`, isHtml: true },
-    { key: 'AI巡检', val: `<button class="info-car-btn" onclick="window.__triggerYoloForCar(${car.id})">YOLO 检测 →</button>`, isHtml: true },
+    { key: '操作', val: '查看详情 →', action: () => navigateToCarDetail(car.id) },
+    { key: '设警', val: car.status === 'warning' ? '重置状态' : '设警', action: () => toggleCarWarning(car.id), btnClass: 'warning-btn' },
+    { key: 'AI巡检', val: 'YOLO 检测 →', action: () => triggerYoloForCar(car.id), btnClass: 'warning-btn' },
   ]
   selectedFacility.value = null
   selectedSensor.value = null
   render()
 }
 
-// 暴露给内联 HTML 按钮
-window.__navigateToCarDetail = (id) => navigateToCarDetail(id)
-window.__triggerYoloForCar = async (carId) => {
+// 触发 YOLO 检测（小车按钮调用）
+const triggerYoloForCar = async (carId) => {
   const car = carStore.carList.find(c => c.id === carId)
   if (!car) return
   showToast(`小车 ${carId} YOLO 检测中...`, 'success')
@@ -1561,7 +1567,8 @@ window.__triggerYoloForCar = async (carId) => {
     showToast('YOLO 检测失败: ' + err.message, 'warn')
   }
 }
-window.__toggleCarWarning = async (id) => {
+// 切换小车预警状态
+const toggleCarWarning = async (id) => {
   const car = carStore.carList.find(c => c.id === id)
   if (!car) return
   try {
@@ -3925,23 +3932,23 @@ function selectZone(zoneId) {
 function showFacilityInfo(f) {
   panelCollapsed.value = false
   infoTitle.value = f.name
-  infoSubtitle.value = `<span class="tag ${statusTagClass(f.status)}">${f.status}</span><span style="color:var(--fg-muted);font-size:12px;margin-left:4px;">${f.desc || ''}</span>`
+  infoSubtitle.value = { tag: f.status, tagClass: statusTagClass(f.status), desc: f.desc || '' }
   const rows = []
   if (f.type === 'tank') {
     rows.push({key: '储罐编号', val: f.id.toUpperCase()})
     rows.push({key: '所属区域', val: getZoneName(f.zone)})
     rows.push({key: '容量', val: f.capacity})
     rows.push({key: '存储介质', val: f.material})
-    rows.push({key: '液位', val: `<span style="color:${f.level > 85 ? 'var(--danger)' : 'var(--accent)'}">${f.level}%</span>`, isHtml: true})
-    rows.push({key: '温度', val: `<span style="color:${f.temp > 80 ? 'var(--warning)' : 'var(--fg)'}">${f.temp}℃</span>`, isHtml: true})
-    rows.push({key: '状态', val: `<span class="tag ${statusTagClass(f.status)}">${f.status}</span>`, isHtml: true})
+    rows.push({key: '液位', val: `${f.level}%`, style: { color: f.level > 85 ? 'var(--danger)' : 'var(--accent)' }})
+    rows.push({key: '温度', val: `${f.temp}℃`, style: { color: f.temp > 80 ? 'var(--warning)' : 'var(--fg)' }})
+    rows.push({key: '状态', val: f.status, tag: true, tagClass: statusTagClass(f.status)})
   } else if (f.type === 'tower') {
     rows.push({key: '设备编号', val: f.id.toUpperCase()})
     rows.push({key: '所属区域', val: getZoneName(f.zone)})
     rows.push({key: '塔高', val: f.height})
     rows.push({key: '操作压力', val: f.pressure})
     rows.push({key: '操作温度', val: f.temp + '℃'})
-    rows.push({key: '状态', val: `<span class="tag ${statusTagClass(f.status)}">${f.status}</span>`, isHtml: true})
+    rows.push({key: '状态', val: f.status, tag: true, tagClass: statusTagClass(f.status)})
   } else {
     rows.push({key: '建筑编号', val: f.id.toUpperCase()})
     rows.push({key: '所属区域', val: getZoneName(f.zone)})
@@ -3953,13 +3960,13 @@ function showFacilityInfo(f) {
     if (f.flow) rows.push({key: '处理流量', val: f.flow})
     if (f.volume) rows.push({key: '池容', val: f.volume})
     if (f.bays) rows.push({key: '装卸位', val: f.bays + ' 个'})
-    rows.push({key: '状态', val: `<span class="tag ${statusTagClass(f.status)}">${f.status}</span>`, isHtml: true})
+    rows.push({key: '状态', val: f.status, tag: true, tagClass: statusTagClass(f.status)})
   }
   infoRows.value = rows
 }
 function clearInfo() {
   infoTitle.value = '选择设施查看详情'
-  infoSubtitle.value = ''
+  infoSubtitle.value = {}
   infoRows.value = []
   selectedZone.value = ''
   selectedCar.value = null
@@ -5486,7 +5493,7 @@ function showSensorInfo(s){
     : '尚未采样'
 
   infoTitle.value = `${s.id}（${priorityLabel}）`
-  infoSubtitle.value = `<span class="tag tag-blue">${type.name}</span><span style="color:var(--fg-muted);font-size:12px;margin-left:4px;">${modeLabel}</span>`
+  infoSubtitle.value = { tag: type.name, tagClass: 'tag tag-blue', desc: modeLabel }
   infoRows.value = [
     { key:'传感器类型', val: '多种气体传感器' },
     { key:'安装高度', val: `${installationHeight.toFixed(1)} m` },

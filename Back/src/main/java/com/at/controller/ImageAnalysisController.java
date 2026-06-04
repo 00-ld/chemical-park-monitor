@@ -19,7 +19,6 @@ import java.time.LocalDateTime;
 @Slf4j
 @RestController
 @RequestMapping("/api/analysis")
-@CrossOrigin
 public class ImageAnalysisController {
 
     @Resource

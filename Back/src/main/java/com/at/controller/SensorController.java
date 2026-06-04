@@ -14,7 +14,6 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/sensor")
-@CrossOrigin
 public class SensorController {
 
     @Resource

@@ -16,7 +16,6 @@ import java.util.Random;
 @Slf4j
 @RestController
 @RequestMapping("/api/history")
-@CrossOrigin
 public class WarningHistoryController {
 
     @Resource

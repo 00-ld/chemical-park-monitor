@@ -232,22 +232,22 @@
           </el-table-column>
           <el-table-column prop="ch4" label="甲烷(CH₄)" align="center" min-width="200">
             <template #default="scope">
-              <div v-html="scope.row.ch4" class="cell-content"></div>
+              <div class="cell-content" style="white-space:pre-line">{{ scope.row.ch4 }}</div>
             </template>
           </el-table-column>
           <el-table-column prop="h2s" label="硫化氢(H₂S)" align="center" min-width="220">
             <template #default="scope">
-              <div v-html="scope.row.h2s" class="cell-content"></div>
+              <div class="cell-content" style="white-space:pre-line">{{ scope.row.h2s }}</div>
             </template>
           </el-table-column>
           <el-table-column prop="co" label="一氧化碳(CO)" align="center" min-width="220">
             <template #default="scope">
-              <div v-html="scope.row.co" class="cell-content"></div>
+              <div class="cell-content" style="white-space:pre-line">{{ scope.row.co }}</div>
             </template>
           </el-table-column>
           <el-table-column prop="o2" label="氧气(O₂)" align="center" min-width="200">
             <template #default="scope">
-              <div v-html="scope.row.o2" class="cell-content"></div>
+              <div class="cell-content" style="white-space:pre-line">{{ scope.row.o2 }}</div>
             </template>
           </el-table-column>
           <el-table-column prop="risk" label="风险描述" align="center" min-width="200" />
@@ -554,9 +554,9 @@ const allGasLevelList = reactive([
     level: '极高危险',
     color: '红色',
     tagType: 'danger',
-    ch4: '≥ 50% LEL<br/>(≈25000ppm)',
-    h2s: '≥ 100mg/m³<br/>(≥ 72ppm)',
-    co: '≥ 300mg/m³<br/>(≥ 262ppm)',
+    ch4: '≥ 50% LEL\n(≈25000ppm)',
+    h2s: '≥ 100mg/m³\n(≥ 72ppm)',
+    co: '≥ 300mg/m³\n(≥ 262ppm)',
     o2: '< 16%VOL 或 >23.5%VOL',
     risk: '致命风险/爆炸极高风险',
     response: '立即疏散/专业应急'
@@ -565,9 +565,9 @@ const allGasLevelList = reactive([
     level: '危险',
     color: '橙色',
     tagType: 'warning',
-    ch4: '25% ~ 50% LEL<br/>(12500-25000ppm)',
-    h2s: '50 ~ 100mg/m³<br/>(36 ~ 72ppm)',
-    co: '100 ~ 300mg/m³<br/>(87 ~ 262ppm)',
+    ch4: '25% ~ 50% LEL\n(12500-25000ppm)',
+    h2s: '50 ~ 100mg/m³\n(36 ~ 72ppm)',
+    co: '100 ~ 300mg/m³\n(87 ~ 262ppm)',
     o2: '16% ~ 19.5%VOL',
     risk: '中毒重伤/爆炸高风险',
     response: '禁止动火/人员撤离'
@@ -576,9 +576,9 @@ const allGasLevelList = reactive([
     level: '预警',
     color: '黄色',
     tagType: 'primary',
-    ch4: '10% ~ 25% LEL<br/>(5000-12500ppm)',
-    h2s: '20 ~ 50mg/m³<br/>(14 ~ 36ppm)',
-    co: '50 ~ 100mg/m³<br/>(43 ~ 87ppm)',
+    ch4: '10% ~ 25% LEL\n(5000-12500ppm)',
+    h2s: '20 ~ 50mg/m³\n(14 ~ 36ppm)',
+    co: '50 ~ 100mg/m³\n(43 ~ 87ppm)',
     o2: '19.5% ~ 20.9%VOL',
     risk: '刺激不适/爆炸预警',
     response: '启动报警/加强通风'
@@ -587,9 +587,9 @@ const allGasLevelList = reactive([
     level: '安全',
     color: '灰色',
     tagType: 'info',
-    ch4: '< 10% LEL<br/>(< 5000ppm)',
-    h2s: '≤ 10mg/m³<br/>(≤ 7ppm)',
-    co: '≤ 20mg/m³<br/>(≤ 17ppm)',
+    ch4: '< 10% LEL\n(< 5000ppm)',
+    h2s: '≤ 10mg/m³\n(≤ 7ppm)',
+    co: '≤ 20mg/m³\n(≤ 17ppm)',
     o2: '20.9% ~ 23.5%VOL',
     risk: '无急性风险/可正常作业',
     response: '常规监测/定期巡检'

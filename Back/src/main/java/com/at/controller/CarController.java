@@ -13,7 +13,6 @@ import java.util.List;
 @Slf4j
 @RestController
 @RequestMapping("/api/car")
-@CrossOrigin
 public class CarController {
 
     @Resource

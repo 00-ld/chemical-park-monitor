@@ -17,37 +17,34 @@ public class TokenInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-//1. 获取请求的url
         String url = request.getRequestURI();
 
-        //2. 判断请求url中是否包含login，如果包含，说明是登录操作，放行。
-        if (url.contains("login")) {
-            log.info("登录操作，放行...");
+        // 登录/注册接口放行
+        if (url.contains("login") || url.contains("register")) {
             return true;
         }
 
-        //3. 获取请求头中的令牌（token）。
+        // 获取 token：优先从 Header，其次从 WebSocket 查询参数
         String jwt = request.getHeader("token");
-
-        //4. 判断令牌是否存在，如果不存在，返回错误结果（未登录）。
-        if(jwt == null || jwt.isEmpty()) {
-            log.info("请求头token为空，返回未登录错误信息...");
-            response.setStatus(401);
-            return  false;
+        if (jwt == null || jwt.isEmpty()) {
+            jwt = request.getParameter("token");
         }
 
-        //5. 解析token，如果解析失败，返回错误结果（未登录）。
+        if (jwt == null || jwt.isEmpty()) {
+            response.setStatus(401);
+            response.getWriter().write("{\"code\":401,\"message\":\"未登录\"}");
+            return false;
+        }
+
         try {
             JwtUtils.parseJWT(jwt);
         } catch (Exception e) {
-            e.printStackTrace();
-            log.info("解析令牌失败，返回未登录错误信息...");
-            response.setStatus(HttpStatus.SC_UNAUTHORIZED);//401
-            return  false;
+            log.warn("令牌无效: {}", e.getMessage());
+            response.setStatus(401);
+            response.getWriter().write("{\"code\":401,\"message\":\"令牌无效\"}");
+            return false;
         }
 
-        //6. 放行。
-        log.info("令牌合法，放行...");
         return true;
     }
 }

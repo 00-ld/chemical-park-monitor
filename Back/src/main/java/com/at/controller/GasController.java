@@ -14,7 +14,6 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/gas")
-@CrossOrigin
 public class GasController {
 
     @Resource

@@ -47,6 +47,9 @@ Manage/dist2/
 # Sensitive configs
 .codex/
 deploy/upload.py
+deploy/.env
+deploy/migrate_passwords.py
+Back/src/main/resources/application-local.properties
 
 # ML models
 *.pt
