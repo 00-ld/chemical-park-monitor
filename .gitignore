@@ -41,6 +41,13 @@ omc/
 .codegraph/
 chemical-park-monitor/
 
+# Build artifacts (large)
+Manage/dist2/
+
+# Sensitive configs
+.codex/
+deploy/upload.py
+
 # ML models
 *.pt
 *.pth

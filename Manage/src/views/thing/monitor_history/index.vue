@@ -354,7 +354,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 
 // ========== 核心配置：后端接口基础地址 ==========
-const baseURL = 'http://localhost:8081/api'
+const baseURL = import.meta.env.VITE_APP_BASE_API || '/api'
 const request = axios.create({
   baseURL: baseURL,
   timeout: 10000,

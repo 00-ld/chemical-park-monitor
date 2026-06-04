@@ -234,7 +234,7 @@ interface AnnounceItem {
 }
 
 const request = axios.create({
-  baseURL: 'http://localhost:8081/api',
+  baseURL: import.meta.env.VITE_APP_BASE_API || '/api',
   timeout: 5000,
 })
 

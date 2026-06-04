@@ -23,7 +23,7 @@ interface GasThreshold {
 }
 
 // 后端接口地址
-const API_BASE = 'http://localhost:8081/api/car'
+const API_BASE = (import.meta.env.VITE_APP_BASE_API || '/api') + '/car'
 
 export const useCarStore = defineStore('car', {
   state: (): {

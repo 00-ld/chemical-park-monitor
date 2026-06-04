@@ -1,33 +1,5 @@
 <template>
   <div class="chempark-container">
-    <header class="top-bar">
-      <div class="logo">
-        <div class="logo-icon"><i class="fas fa-industry"></i></div>
-        <div>
-          <div class="logo-text">CHEMPARK</div>
-          <div class="logo-sub">工业园区智慧地图平台</div>
-        </div>
-      </div>
-      <button class="back-home-btn" @click="goBackHome" title="返回主页">
-        <i class="fas fa-home"></i>
-        <span>返回主页</span>
-      </button>
-      <div class="status-group">
-        <div class="status-item">
-          <div class="status-dot green"></div>
-          <span>系统在线</span>
-        </div>
-        <div class="status-item">
-          <div class="status-dot orange"></div>
-          <span>{{ alerts.length }} 项告警</span>
-        </div>
-        <div class="status-item" style="color:var(--fg);font-family:'Orbitron',sans-serif;font-size:11px;">
-          <i class="fas fa-clock" style="color:var(--accent);font-size:10px;"></i>
-          <span>{{ clock }}</span>
-        </div>
-      </div>
-    </header>
-
     <div class="main-layout">
       <aside class="left-panel">
         <div class="panel-section">
@@ -1568,7 +1540,7 @@ window.__triggerYoloForCar = async (carId) => {
       const formData = new FormData()
       formData.append('file', blob, `car_${carId}_capture.png`)
       try {
-        const res = await fetch('http://localhost:8081/api/analysis/person', { method: 'POST', body: formData })
+        const res = await fetch((import.meta.env.VITE_APP_BASE_API || '/api') + '/analysis/person', { method: 'POST', body: formData })
         const data = await res.json()
         if (data.status === 'success') {
           yoloResult.value = { carId, count: data.count, imageBase64: data.image_base64, timestamp: Date.now() }
@@ -2095,7 +2067,7 @@ let lastAnimTime = 0
 /** 从后端加载所有已保存的传感器 */
 async function fetchSensorsFromDB() {
   try {
-    const resp = await fetch('http://localhost:8081/api/sensor/list')
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/list`)
     const data = await resp.json()
     if (data.code === 200 && Array.isArray(data.data)) {
       sensors.value = buildActiveSensorSeries(data.data, diffusionFrames.value)
@@ -2109,7 +2081,7 @@ async function fetchSensorsFromDB() {
 /** 保存传感器到后端 */
 async function saveSensorToDB(sensor) {
   try {
-    const resp = await fetch('http://localhost:8081/api/sensor/add', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2143,7 +2115,7 @@ async function saveSensorToDB(sensor) {
 /** 更新传感器参数到后端 */
 async function updateSensorToDB(sensor) {
   try {
-    const resp = await fetch('http://localhost:8081/api/sensor/update', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2173,7 +2145,7 @@ async function updateSensorToDB(sensor) {
 /** 从后端删除传感器 */
 async function deleteSensorFromDB(id) {
   try {
-    const resp = await fetch('http://localhost:8081/api/sensor/delete', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -2199,7 +2171,7 @@ async function deleteAllSensorsFromDB() {
 /** 从后端加载气体类型列表 */
 async function fetchGasList() {
   try {
-    const resp = await fetch('http://localhost:8081/api/gas/list')
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/list`)
     const data = await resp.json()
     if (data.code === 200 && Array.isArray(data.data)) {
       gases.value = data.data
@@ -2212,7 +2184,7 @@ async function fetchGasList() {
 /** 保存气体类型到后端 */
 async function saveGasToDB(gas) {
   try {
-    const resp = await fetch('http://localhost:8081/api/gas/add', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(gas)
@@ -2231,7 +2203,7 @@ async function saveGasToDB(gas) {
 /** 更新气体类型到后端 */
 async function updateGasToDB(gas) {
   try {
-    const resp = await fetch('http://localhost:8081/api/gas/update', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(gas)
@@ -2250,7 +2222,7 @@ async function updateGasToDB(gas) {
 /** 从后端删除气体类型 */
 async function deleteGasFromDB(id) {
   try {
-    const resp = await fetch('http://localhost:8081/api/gas/delete', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -5764,69 +5736,19 @@ watch(
   --card: rgba(17,24,39,0.92);
   --border: rgba(122,139,168,0.18);
 }
-.top-bar {
-  position: fixed; top:0; left:0; right:0;
-  height: 56px;
-  background: linear-gradient(180deg, #0a0f1a, #0d1322);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 24px; z-index: 100;
+:deep(.layout_tabbar) {
+  display: none !important;
 }
-.top-bar .logo { display: flex; align-items: center; gap: 12px; }
-.top-bar .logo-icon {
-  width: 36px; height: 36px;
-  background: linear-gradient(135deg, var(--accent), #00b37d);
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; color: var(--bg);
+:deep(.layout_main) {
+  padding: 0 !important;
+  margin-top: 80px !important;
+  background: #0a0f1a !important;
+  overflow: hidden !important;
 }
-.top-bar .logo-text {
-  font-family: 'Orbitron', sans-serif;
-  font-weight: 700; font-size: 16px;
-  letter-spacing: 2px; color: var(--accent);
+:deep(.layout_main::before) {
+  display: none !important;
 }
-.top-bar .logo-sub {
-  font-size: 10px; color: var(--fg-muted); margin-top: 2px;
-}
-.back-home-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: rgba(64, 224, 208, 0.15);
-  border: 1px solid rgba(64, 224, 208, 0.4);
-  border-radius: 8px;
-  color: #40e0d0;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-  backdrop-filter: blur(10px);
-}
-.back-home-btn:hover {
-  background: rgba(64, 224, 208, 0.3);
-  border-color: rgba(64, 224, 208, 0.8);
-  box-shadow: 0 0 15px rgba(64, 224, 208, 0.4);
-  transform: translateY(-1px);
-}
-.back-home-btn i {
-  font-size: 16px;
-}
-.top-bar .logo-sub { font-size: 11px; color: var(--fg-muted); letter-spacing: 1px; }
-.top-bar .status-group { display: flex; align-items: center; gap: 20px; }
-.status-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-muted); }
-.status-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-.status-dot.green { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
-.status-dot.orange { background: var(--warning); box-shadow: 0 0 8px rgba(255,107,53,0.4); }
-@keyframes pulse-dot {
-  0%,100% { opacity:1; transform:scale(1); }
-  50% { opacity:0.6; transform:scale(0.8); }
-}
-.main-layout { display: flex; height: 100vh; padding-top: 56px; }
+.main-layout { display: flex; height: calc(100vh - 80px); }
 .left-panel {
   width: 280px; min-width: 280px;
   background: #111827;

@@ -597,7 +597,7 @@ const formatWarningTime = (timeStr) => {
 
 const fetchWarningHistory = async () => {
   try {
-    const res = await axios.get('http://localhost:8081/api/history/list')
+    const res = await axios.get((import.meta.env.VITE_APP_BASE_API || '/api') + '/history/list')
     if (res.data.code === 200) {
       warningHistory.value = res.data.data
       renderAlertsChart()
@@ -731,12 +731,7 @@ onUnmounted(() => {
 }
 
 .integrated-tabs :deep(.el-tabs__header) {
-  margin: 0 0 20px;
-  background: rgba(10, 25, 50, 0.8);
-  backdrop-filter: blur(10px);
-  border-radius: 12px 12px 0 0;
-  padding: 0 20px;
-  border-bottom: 1px solid rgba(64, 224, 208, 0.2);
+  display: none !important;
 }
 
 .integrated-tabs :deep(.el-tabs__item) {

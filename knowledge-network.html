@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识神经网络 - 函数关系可视化</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0a0e1a; color: #e0e0e0; overflow: hidden; height: 100vh; }
+
+  /* --- Top Bar --- */
+  #topbar { position: fixed; top: 0; left: 0; right: 0; height: 52px; background: rgba(12,16,30,0.92); border-bottom: 1px solid rgba(100,140,255,0.15); display: flex; align-items: center; padding: 0 20px; z-index: 100; backdrop-filter: blur(10px); }
+  #topbar h1 { font-size: 15px; font-weight: 600; background: linear-gradient(135deg, #64b5f6, #ce93d8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 0.5px; }
+  #topbar .stats { margin-left: auto; display: flex; gap: 18px; font-size: 12px; color: #8892a8; }
+  #topbar .stats span { display: flex; align-items: center; gap: 4px; }
+  #topbar .stats .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+  /* --- Search --- */
+  #search-box { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 110; }
+  #search-box input { width: 280px; padding: 6px 14px; border-radius: 18px; border: 1px solid rgba(100,140,255,0.25); background: rgba(15,20,40,0.9); color: #d0d8f0; font-size: 13px; outline: none; transition: all 0.3s; }
+  #search-box input:focus { border-color: #64b5f6; box-shadow: 0 0 12px rgba(100,181,246,0.2); width: 340px; }
+  #search-box input::placeholder { color: #556080; }
+
+  /* --- Left Panel: Layer Filter --- */
+  #layer-panel { position: fixed; top: 62px; left: 12px; width: 180px; background: rgba(12,16,30,0.88); border-radius: 10px; border: 1px solid rgba(100,140,255,0.12); padding: 12px; z-index: 90; backdrop-filter: blur(8px); }
+  #layer-panel h3 { font-size: 12px; color: #7888a8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .layer-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer; transition: background 0.2s; font-size: 12.5px; margin-bottom: 2px; }
+  .layer-item:hover { background: rgba(100,140,255,0.08); }
+  .layer-item.active { background: rgba(100,140,255,0.12); }
+  .layer-item .swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .layer-item .count { margin-left: auto; font-size: 11px; color: #556080; }
+
+  /* --- Right Panel: Detail --- */
+  #detail-panel { position: fixed; top: 62px; right: 12px; width: 320px; max-height: calc(100vh - 80px); background: rgba(12,16,30,0.92); border-radius: 10px; border: 1px solid rgba(100,140,255,0.12); padding: 16px; z-index: 90; backdrop-filter: blur(8px); overflow-y: auto; display: none; }
+  #detail-panel.visible { display: block; }
+  #detail-panel .close-btn { position: absolute; top: 10px; right: 12px; cursor: pointer; color: #556080; font-size: 16px; }
+  #detail-panel .close-btn:hover { color: #e0e0e0; }
+  #detail-panel h2 { font-size: 15px; color: #b0c4f0; margin-bottom: 4px; padding-right: 20px; }
+  #detail-panel .file-path { font-size: 11px; color: #556080; margin-bottom: 10px; word-break: break-all; }
+  #detail-panel .section { margin-bottom: 12px; }
+  #detail-panel .section-title { font-size: 11px; color: #7888a8; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid rgba(100,140,255,0.08); }
+  #detail-panel .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin: 2px; }
+  #detail-panel .dep-item { padding: 4px 0; font-size: 12px; color: #a0b0d0; cursor: pointer; }
+  #detail-panel .dep-item:hover { color: #64b5f6; }
+  #detail-panel .learning-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; background: rgba(206,147,216,0.15); color: #ce93d8; font-size: 11px; margin-top: 6px; }
+
+  /* --- SVG --- */
+  #graph-svg { width: 100vw; height: 100vh; }
+  .link { stroke-linecap: round; }
+  .node-group { cursor: pointer; }
+  .node-circle { transition: r 0.3s, fill-opacity 0.3s; }
+  .node-label { font-size: 10px; fill: #a0b0d0; pointer-events: none; text-anchor: middle; dominant-baseline: central; }
+  .link-label { font-size: 8px; fill: #3a4060; pointer-events: none; }
+
+  /* --- Pulse animation --- */
+  @keyframes pulse-ring { 0% { r: 4; opacity: 0.8; } 100% { r: 18; opacity: 0; } }
+  .pulse-ring { animation: pulse-ring 1.5s ease-out infinite; }
+
+  /* --- Bottom Legend --- */
+  #bottom-bar { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(12,16,30,0.85); border-radius: 20px; border: 1px solid rgba(100,140,255,0.1); padding: 8px 20px; display: flex; gap: 16px; align-items: center; z-index: 90; backdrop-filter: blur(8px); font-size: 11px; color: #7888a8; }
+  #bottom-bar .tip { display: flex; align-items: center; gap: 4px; }
+  #bottom-bar kbd { padding: 1px 5px; border-radius: 3px; background: rgba(100,140,255,0.1); border: 1px solid rgba(100,140,255,0.15); font-size: 10px; }
+
+  /* --- Learning Panel --- */
+  #learning-panel { position: fixed; bottom: 52px; left: 12px; width: 180px; background: rgba(12,16,30,0.88); border-radius: 10px; border: 1px solid rgba(206,147,216,0.15); padding: 12px; z-index: 90; backdrop-filter: blur(8px); }
+  #learning-panel h3 { font-size: 12px; color: #ce93d8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .learn-item { font-size: 11.5px; color: #a0b0d0; padding: 3px 0; display: flex; justify-content: space-between; }
+  .learn-item .freq { color: #ce93d8; font-size: 10px; }
+
+  /* --- Tooltip --- */
+  .tooltip { position: absolute; padding: 6px 10px; background: rgba(20,25,50,0.95); border: 1px solid rgba(100,140,255,0.2); border-radius: 6px; font-size: 11px; color: #d0d8f0; pointer-events: none; z-index: 200; max-width: 260px; backdrop-filter: blur(6px); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(100,140,255,0.2); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>Chemical Park Monitor - Knowledge Neural Network</h1>
+  <div class="stats">
+    <span><span class="dot" style="background:#64b5f6"></span> Nodes: <b id="stat-nodes">0</b></span>
+    <span><span class="dot" style="background:#81c784"></span> Edges: <b id="stat-edges">0</b></span>
+    <span><span class="dot" style="background:#ce93d8"></span> Explored: <b id="stat-explored">0</b></span>
+  </div>
+</div>
+
+<div id="search-box">
+  <input type="text" id="search-input" placeholder="Search functions, classes, files..." />
+</div>
+
+<div id="layer-panel">
+  <h3>Layers</h3>
+  <div id="layer-list"></div>
+</div>
+
+<div id="detail-panel">
+  <span class="close-btn" onclick="closeDetail()">&times;</span>
+  <div id="detail-content"></div>
+</div>
+
+<div id="learning-panel">
+  <h3>Exploration</h3>
+  <div id="learning-list"><div style="font-size:11px;color:#556080;">Click nodes to begin learning</div></div>
+</div>
+
+<svg id="graph-svg"></svg>
+
+<div class="tooltip" id="tooltip" style="display:none;"></div>
+
+<div id="bottom-bar">
+  <div class="tip"><kbd>Scroll</kbd> Zoom</div>
+  <div class="tip"><kbd>Drag</kbd> Move</div>
+  <div class="tip"><kbd>Click</kbd> Detail</div>
+  <div class="tip"><kbd>Hover</kbd> Highlight path</div>
+  <div class="tip" style="color:#ce93d8">&#9733; Brighter = more explored</div>
+</div>
+
+<script>
+// ============================================================
+//  DATA: Nodes and Edges extracted from project source code
+// ============================================================
+const LAYERS = {
+  controller: { color: '#64b5f6', label: 'Controller' },
+  service:    { color: '#81c784', label: 'Service' },
+  mapper:     { color: '#ffb74d', label: 'Mapper/DAO' },
+  pojo:       { color: '#f48fb1', label: 'POJO/Model' },
+  util:       { color: '#ce93d8', label: 'Utility' },
+  frontend:   { color: '#4dd0e1', label: 'Frontend' },
+  data:       { color: '#aed581', label: 'Data/Config' },
+  router:     { color: '#ffab91', label: 'Router/API' },
+  store:      { color: '#b39ddb', label: 'Store/State' },
+  view:       { color: '#80cbc4', label: 'View/Page' },
+};
+
+const nodes = [
+  // --- Controllers ---
+  { id: 'CarController', layer: 'controller', file: 'controller/CarController.java', methods: ['getAllCars','setWarning','resetStatus'], desc: '巡检小车管理控制器', api: ['/api/car/getAllCars','/api/car/setWarning','/api/car/resetStatus'] },
+  { id: 'GasController', layer: 'controller', file: 'controller/GasController.java', methods: ['getAllGases','addGas','updateGas','deleteGas'], desc: '气体类型管理控制器', api: ['/api/gas/list','/api/gas/add','/api/gas/update','/api/gas/delete'] },
+  { id: 'ImageAnalysisController', layer: 'controller', file: 'controller/ImageAnalysisController.java', methods: ['analyzePerson','getList','delete'], desc: '图像分析控制器（调用Python算法）', api: ['/api/analysis/person','/api/analysis/list','/api/analysis/delete/{id}'] },
+  { id: 'LoginAndRegisterController', layer: 'controller', file: 'controller/LoginAndRegisterController.java', methods: ['login','register'], desc: '登录注册控制器', api: ['/api/user/login','/api/user/register'] },
+  { id: 'SensorController', layer: 'controller', file: 'controller/SensorController.java', methods: ['getAllSensors','addSensor','updateSensor','deleteSensor'], desc: '传感器管理控制器', api: ['/api/sensor/list','/api/sensor/add','/api/sensor/update','/api/sensor/delete'] },
+  { id: 'SensorLayoutController', layer: 'controller', file: 'controller/SensorLayoutController.java', methods: ['getAllLayouts','getLayoutById','saveLayout','updateLayout','deleteLayout'], desc: '传感器布局方案控制器', api: ['/api/sensor-layout/list','/api/sensor-layout/{id}','/api/sensor-layout/save','/api/sensor-layout/update','/api/sensor-layout/delete'] },
+  { id: 'WarningHistoryController', layer: 'controller', file: 'controller/WarningHistoryController.java', methods: ['getAllHistory','deleteHistory','addWarningRecord'], desc: '预警历史记录控制器', api: ['/api/warning/list','/api/warning/delete'] },
+
+  // --- Services ---
+  { id: 'CarService', layer: 'service', file: 'service/CarService.java', methods: ['getAllCars','setWarning','resetStatus'], desc: '小车业务逻辑' },
+  { id: 'GasService', layer: 'service', file: 'service/GasService.java', methods: ['addGas','updateGas','deleteGas','getAllGases','getGasById'], desc: '气体类型业务逻辑' },
+  { id: 'LoginService', layer: 'service', file: 'service/LoginService.java', methods: ['login','register'], desc: '登录注册服务接口', isInterface: true },
+  { id: 'LoginServiceImpl', layer: 'service', file: 'service/impl/LoginServiceImpl.java', methods: ['login','register'], desc: '登录注册服务实现（JWT生成）' },
+  { id: 'SensorService', layer: 'service', file: 'service/SensorService.java', methods: ['addSensor','updateSensor','deleteSensor','getAllSensors','getSensorById'], desc: '传感器业务逻辑' },
+  { id: 'SensorLayoutService', layer: 'service', file: 'service/SensorLayoutService.java', methods: ['saveLayout','updateLayout','deleteLayout','getAllLayouts','getLayoutById','getLayoutDetails'], desc: '传感器布局方案管理（含事务）' },
+  { id: 'WarningHistoryService', layer: 'service', file: 'service/WarningHistoryService.java', methods: ['addWarningRecord','getAllHistory','deleteHistoryById'], desc: '预警历史服务接口', isInterface: true },
+  { id: 'WarningHistoryServiceImpl', layer: 'service', file: 'service/impl/WarningHistoryServiceImpl.java', methods: ['addWarningRecord','getAllHistory','deleteHistoryById'], desc: '预警历史服务实现' },
+
+  // --- Mappers ---
+  { id: 'CarMapper', layer: 'mapper', file: 'mapper/CarMapper.java', methods: ['getAllCars','setWarning','resetStatus','add','selectAll'], desc: '小车数据访问层（MyBatis XML）' },
+  { id: 'GasMapper', layer: 'mapper', file: 'mapper/GasMapper.java', methods: ['insert','updateById','deleteById','selectList','selectById'], desc: '气体类型数据访问层' },
+  { id: 'InspectRecordMapper', layer: 'mapper', file: 'mapper/InspectRecordMapper.java', methods: ['insert','listAll','deleteById'], desc: '巡检记录数据访问层' },
+  { id: 'LoginMapper', layer: 'mapper', file: 'mapper/LoginMapper.java', methods: ['getByUsernameAndPassword','getByUsername','insert'], desc: '用户登录数据访问层' },
+  { id: 'SensorMapper', layer: 'mapper', file: 'mapper/SensorMapper.java', methods: ['insert','updateById','deleteById','selectList','selectById'], desc: '传感器数据访问层' },
+  { id: 'SensorLayoutMapper', layer: 'mapper', file: 'mapper/SensorLayoutMapper.java', methods: ['insertLayout','updateLayout','deleteLayout','selectLayoutList','selectLayoutById','insertDetail','deleteDetailsByLayoutId','selectDetailsByLayoutId'], desc: '布局方案数据访问层' },
+  { id: 'WarningHistoryMapper', layer: 'mapper', file: 'mapper/WarningHistoryMapper.java', methods: ['insert','selectList','deleteById'], desc: '预警历史数据访问层' },
+
+  // --- POJO ---
+  { id: 'Car', layer: 'pojo', file: 'pojo/Car.java', methods: [], desc: '小车实体（id, warning, status）' },
+  { id: 'Gas', layer: 'pojo', file: 'pojo/Gas.java', methods: [], desc: '气体类型实体（id, name, detectionRange...）' },
+  { id: 'Sensor', layer: 'pojo', file: 'pojo/Sensor.java', methods: [], desc: '传感器实体（id, x, y, type, risk...）' },
+  { id: 'SensorLayout', layer: 'pojo', file: 'pojo/SensorLayout.java', methods: [], desc: '布局方案实体' },
+  { id: 'SensorLayoutDetail', layer: 'pojo', file: 'pojo/SensorLayoutDetail.java', methods: [], desc: '布局方案明细（传感器坐标）' },
+  { id: 'WarningHistory', layer: 'pojo', file: 'pojo/WarningHistory.java', methods: [], desc: '预警历史实体' },
+  { id: 'InspectRecord', layer: 'pojo', file: 'pojo/InspectRecord.java', methods: [], desc: '巡检记录实体' },
+  { id: 'Result', layer: 'pojo', file: 'pojo/Result.java', methods: ['success','error'], desc: '统一返回结果包装' },
+  { id: 'User', layer: 'pojo', file: 'pojo/login_register/User.java', methods: [], desc: '用户实体（username, password）' },
+  { id: 'LoginInfo', layer: 'pojo', file: 'pojo/login_register/LoginInfo.java', methods: [], desc: '登录信息（routes, buttons, roles）' },
+  { id: 'PageResult', layer: 'pojo', file: 'pojo/query/PageResult.java', methods: [], desc: '分页结果泛型' },
+
+  // --- Utils ---
+  { id: 'JwtUtils', layer: 'util', file: 'utils/JwtUtils.java', methods: ['generateJwt','parseJWT','getSigningKey'], desc: 'JWT令牌生成与解析工具' },
+  { id: 'GlobalExceptionHandler', layer: 'util', file: 'exception/GlobalExceptionHandler.java', methods: ['handleException'], desc: '全局异常处理器' },
+  { id: 'TokenInterceptor', layer: 'util', file: 'interceptor/TokenInterceptor.java', methods: ['preHandle','postHandle'], desc: 'Token拦截器（请求鉴权）' },
+
+  // --- Frontend TS ---
+  { id: 'request.ts', layer: 'frontend', file: 'utils/request.ts', methods: ['interceptors'], desc: 'Axios二次封装（请求/响应拦截）' },
+  { id: 'token.ts', layer: 'frontend', file: 'utils/token.ts', methods: ['SET_TOKEN','GET_TOKEN','REMOVE_TOKEN'], desc: '本地Token存取' },
+  { id: 'time.ts', layer: 'frontend', file: 'utils/time.ts', methods: ['getTime'], desc: '时间段判断工具' },
+  { id: 'pathPlanning.ts', layer: 'frontend', file: 'utils/pathPlanning.ts', methods: ['findPath','dijkstra','buildGraph','findMultipleEscapeRoutes','generateOptimalEvacuationPlan','calculateRiskLevel'], desc: 'Dijkstra路径规划与疏散算法' },
+
+  // --- Frontend API ---
+  { id: 'user/index.ts', layer: 'router', file: 'api/user/index.ts', methods: ['reqLogin','reqRegister','reqUserInfo','reqLogout'], desc: '用户相关API接口' },
+  { id: 'algorithm.ts', layer: 'router', file: 'api/algorithm.ts', methods: ['runDiffusionSimulation','runPinnCoarseSearch','runPinnInversion','runEvacuationPlanning','runEngineTask','getGasTypes','checkAlgorithmHealth'], desc: '算法引擎API（扩散模拟/PINN反演）' },
+  { id: 'algorithmClient.ts', layer: 'router', file: 'api/algorithmClient.ts', methods: ['interceptors'], desc: '算法服务Axios客户端' },
+
+  // --- Frontend Store ---
+  { id: 'user.ts(store)', layer: 'store', file: 'store/modules/user.ts', methods: ['login','logout','getUserInfo'], desc: '用户状态管理（Pinia）' },
+  { id: 'setting.ts(store)', layer: 'store', file: 'store/modules/setting.ts', methods: ['toggle','refresh'], desc: '界面设置状态' },
+  { id: 'carStore.ts', layer: 'store', file: 'store/carStore.ts', methods: ['fetchAllCars','setWarning','resetStatus'], desc: '小车状态管理（Pinia）' },
+
+  // --- Frontend Data ---
+  { id: 'parkAssets.js', layer: 'data', file: 'data/parkAssets.js', methods: ['zones','facilities','roads','gasDetections'], desc: '园区资产数据（区域/设施/道路）' },
+  { id: 'gasSourceCatalog.js', layer: 'data', file: 'data/gasSourceCatalog.js', methods: ['GAS_SOURCE_CATALOG','validateGasLeakSource','getGasSourceConfig'], desc: '气体泄漏源校验规则' },
+  { id: 'carPatrolRoutes.js', layer: 'data', file: 'data/carPatrolRoutes.js', methods: ['CAR_PATROL_ROUTES','getCarPatrolRoute','getPatrolCarIds'], desc: '小车巡检路线定义' },
+  { id: 'coordinate.js', layer: 'data', file: 'data/coordinate.js', methods: ['worldToGeo','geoToWorld','formatGeoCoord'], desc: '坐标转换工具' },
+  { id: 'phase1Config.ts', layer: 'data', file: 'data/phase1Config.ts', methods: [], desc: 'Phase1配置数据' },
+
+  // --- Frontend Views ---
+  { id: 'login/index.vue', layer: 'view', file: 'views/login/index.vue', methods: ['handleLogin'], desc: '登录页面' },
+  { id: 'home/index.vue', layer: 'view', file: 'views/home/index.vue', methods: [], desc: '首页仪表盘' },
+  { id: 'screen/index.vue', layer: 'view', file: 'views/screen/index.vue', methods: [], desc: '大屏监控视图' },
+  { id: 'CarHome.vue', layer: 'view', file: 'views/Car/CarHome.vue', methods: [], desc: '小车列表页' },
+  { id: 'CarDetail.vue', layer: 'view', file: 'views/Car/CarDetail.vue', methods: [], desc: '小车详情页' },
+  { id: 'YOLO/Home.vue', layer: 'view', file: 'views/YOLO/Home.vue', methods: [], desc: 'YOLO图像分析页' },
+  { id: 'emergency/index.vue', layer: 'view', file: 'views/emergency/index.vue', methods: [], desc: '应急疏散页' },
+  { id: 'monitor_history/index.vue', layer: 'view', file: 'views/thing/monitor_history/index.vue', methods: [], desc: '监控历史记录页' },
+];
+
+const edges = [
+  // Controller -> Service
+  { source: 'CarController', target: 'CarService', type: 'call', label: '@Resource' },
+  { source: 'GasController', target: 'GasService', type: 'call', label: '@Resource' },
+  { source: 'ImageAnalysisController', target: 'InspectRecordMapper', type: 'call', label: '@Resource' },
+  { source: 'LoginAndRegisterController', target: 'LoginService', type: 'call', label: '@Autowired' },
+  { source: 'SensorController', target: 'SensorService', type: 'call', label: '@Resource' },
+  { source: 'SensorLayoutController', target: 'SensorLayoutService', type: 'call', label: '@Resource' },
+  { source: 'WarningHistoryController', target: 'WarningHistoryService', type: 'call', label: '@Resource' },
+
+  // Service -> Mapper
+  { source: 'CarService', target: 'CarMapper', type: 'call', label: '@Resource' },
+  { source: 'GasService', target: 'GasMapper', type: 'call', label: '@Resource' },
+  { source: 'SensorService', target: 'SensorMapper', type: 'call', label: '@Resource' },
+  { source: 'SensorLayoutService', target: 'SensorLayoutMapper', type: 'call', label: '@Resource' },
+  { source: 'LoginServiceImpl', target: 'LoginMapper', type: 'call', label: '@Autowired' },
+  { source: 'WarningHistoryServiceImpl', target: 'WarningHistoryMapper', type: 'call', label: '@Resource' },
+
+  // Service -> Utils
+  { source: 'LoginServiceImpl', target: 'JwtUtils', type: 'call', label: 'generateJwt' },
+
+  // Interface -> Impl
+  { source: 'LoginService', target: 'LoginServiceImpl', type: 'implements', label: 'impl' },
+  { source: 'WarningHistoryService', target: 'WarningHistoryServiceImpl', type: 'implements', label: 'impl' },
+
+  // Mapper -> POJO
+  { source: 'CarMapper', target: 'Car', type: 'uses', label: 'resultType' },
+  { source: 'GasMapper', target: 'Gas', type: 'uses', label: 'resultType' },
+  { source: 'SensorMapper', target: 'Sensor', type: 'uses', label: 'resultType' },
+  { source: 'SensorLayoutMapper', target: 'SensorLayout', type: 'uses', label: 'resultType' },
+  { source: 'SensorLayoutMapper', target: 'SensorLayoutDetail', type: 'uses', label: 'resultType' },
+  { source: 'WarningHistoryMapper', target: 'WarningHistory', type: 'uses', label: 'resultType' },
+  { source: 'InspectRecordMapper', target: 'InspectRecord', type: 'uses', label: 'resultType' },
+  { source: 'LoginMapper', target: 'User', type: 'uses', label: 'resultType' },
+
+  // Controller -> POJO
+  { source: 'CarController', target: 'Result', type: 'uses', label: 'ResponseEntity' },
+  { source: 'GasController', target: 'Result', type: 'uses', label: 'ResponseEntity' },
+  { source: 'SensorController', target: 'Result', type: 'uses', label: 'ResponseEntity' },
+  { source: 'SensorLayoutController', target: 'Result', type: 'uses', label: 'ResponseEntity' },
+  { source: 'SensorLayoutController', target: 'SensorLayout', type: 'uses', label: '@RequestBody' },
+  { source: 'SensorLayoutController', target: 'SensorLayoutDetail', type: 'uses', label: '@RequestBody' },
+  { source: 'WarningHistoryController', target: 'WarningHistory', type: 'uses', label: 'list' },
+  { source: 'LoginAndRegisterController', target: 'User', type: 'uses', label: '@RequestBody' },
+
+  // Service -> POJO
+  { source: 'CarService', target: 'Car', type: 'uses', label: 'return' },
+  { source: 'GasService', target: 'Gas', type: 'uses', label: 'return' },
+  { source: 'SensorService', target: 'Sensor', type: 'uses', label: 'return' },
+  { source: 'SensorLayoutService', target: 'SensorLayout', type: 'uses', label: 'return' },
+  { source: 'SensorLayoutService', target: 'SensorLayoutDetail', type: 'uses', label: 'list' },
+  { source: 'WarningHistoryServiceImpl', target: 'WarningHistory', type: 'uses', label: 'new' },
+  { source: 'LoginServiceImpl', target: 'User', type: 'uses', label: 'param' },
+
+  // Interceptor
+  { source: 'TokenInterceptor', target: 'JwtUtils', type: 'call', label: 'parseJWT' },
+  { source: 'TokenInterceptor', target: 'User', type: 'uses', label: 'validate' },
+
+  // --- Frontend connections ---
+  { source: 'login/index.vue', target: 'user/index.ts', type: 'call', label: 'reqLogin' },
+  { source: 'user/index.ts', target: 'request.ts', type: 'call', label: 'import' },
+  { source: 'request.ts', target: 'token.ts', type: 'call', label: 'GET_TOKEN' },
+  { source: 'request.ts', target: 'user.ts(store)', type: 'call', label: 'useUserStore' },
+  { source: 'user.ts(store)', target: 'user/index.ts', type: 'call', label: 'reqLogin' },
+  { source: 'user.ts(store)', target: 'token.ts', type: 'call', label: 'SET_TOKEN' },
+  { source: 'CarHome.vue', target: 'carStore.ts', type: 'call', label: 'useCarStore' },
+  { source: 'carStore.ts', target: 'request.ts', type: 'call', label: 'import' },
+  { source: 'algorithm.ts', target: 'algorithmClient.ts', type: 'call', label: 'import' },
+  { source: 'algorithmClient.ts', target: 'request.ts', type: 'parallel', label: 'axios' },
+
+  // Data connections
+  { source: 'carPatrolRoutes.js', target: 'parkAssets.js', type: 'depends', label: 'roads' },
+  { source: 'coordinate.js', target: 'parkAssets.js', type: 'parallel', label: 'GEO_REF' },
+  { source: 'gasSourceCatalog.js', target: 'parkAssets.js', type: 'depends', label: 'facilities' },
+  { source: 'pathPlanning.ts', target: 'parkAssets.js', type: 'depends', label: 'Road' },
+
+  // Emergency view connections
+  { source: 'emergency/index.vue', target: 'pathPlanning.ts', type: 'call', label: 'findPath' },
+  { source: 'emergency/index.vue', target: 'gasSourceCatalog.js', type: 'call', label: 'validate' },
+  { source: 'emergency/index.vue', target: 'parkAssets.js', type: 'call', label: 'facilities' },
+
+  // Screen connections
+  { source: 'screen/index.vue', target: 'algorithm.ts', type: 'call', label: 'runDiffusion' },
+  { source: 'screen/index.vue', target: 'carStore.ts', type: 'call', label: 'fetchAllCars' },
+  { source: 'screen/index.vue', target: 'parkAssets.js', type: 'call', label: 'zones' },
+];
+
+// ============================================================
+//  SELF-LEARNING STATE
+// ============================================================
+const learningState = {
+  visitCount: {},    // nodeId -> count
+  pathMemory: [],    // recent traversal paths
+  affinity: {},      // nodeA -> nodeB -> co-visit count
+  totalClicks: 0,
+};
+
+function recordVisit(nodeId) {
+  learningState.visitCount[nodeId] = (learningState.visitCount[nodeId] || 0) + 1;
+  learningState.totalClicks++;
+  learningState.pathMemory.push(nodeId);
+  if (learningState.pathMemory.length > 30) learningState.pathMemory.shift();
+  // Build affinity from recent path
+  if (learningState.pathMemory.length >= 2) {
+    const last = learningState.pathMemory[learningState.pathMemory.length - 1];
+    const prev = learningState.pathMemory[learningState.pathMemory.length - 2];
+    if (!learningState.affinity[last]) learningState.affinity[last] = {};
+    if (!learningState.affinity[prev]) learningState.affinity[prev] = {};
+    learningState.affinity[last][prev] = (learningState.affinity[last][prev] || 0) + 1;
+    learningState.affinity[prev][last] = (learningState.affinity[prev][last] || 0) + 1;
+  }
+  updateLearningPanel();
+  saveLearning();
+}
+
+function getVisitCount(nodeId) { return learningState.visitCount[nodeId] || 0; }
+function getAffinity(a, b) { return (learningState.affinity[a] && learningState.affinity[a][b]) || 0; }
+
+function saveLearning() {
+  try { localStorage.setItem('knn-learning', JSON.stringify(learningState)); } catch(e) {}
+}
+function loadLearning() {
+  try {
+    const d = localStorage.getItem('knn-learning');
+    if (d) Object.assign(learningState, JSON.parse(d));
+  } catch(e) {}
+}
+
+function updateLearningPanel() {
+  const list = document.getElementById('learning-list');
+  const sorted = Object.entries(learningState.visitCount).sort((a,b) => b[1] - a[1]).slice(0, 8);
+  if (sorted.length === 0) {
+    list.innerHTML = '<div style="font-size:11px;color:#556080;">Click nodes to begin learning</div>';
+    return;
+  }
+  list.innerHTML = sorted.map(([id, count]) => `<div class="learn-item"><span>${id}</span><span class="freq">${count}x</span></div>`).join('');
+  document.getElementById('stat-explored').textContent = Object.keys(learningState.visitCount).length;
+}
+
+// ============================================================
+//  GRAPH RENDERING
+// ============================================================
+loadLearning();
+
+const svg = d3.select('#graph-svg');
+const width = window.innerWidth;
+const height = window.innerHeight;
+
+// Build graph data
+const graphNodes = nodes.map(n => ({ ...n }));
+const nodeMap = {};
+graphNodes.forEach(n => nodeMap[n.id] = n);
+
+const graphEdges = edges.filter(e => nodeMap[e.source] && nodeMap[e.target]).map(e => ({
+  ...e,
+  source: nodeMap[e.source] || e.source,
+  target: nodeMap[e.target] || e.target,
+}));
+
+// Stats
+document.getElementById('stat-nodes').textContent = graphNodes.length;
+document.getElementById('stat-edges').textContent = graphEdges.length;
+document.getElementById('stat-explored').textContent = Object.keys(learningState.visitCount).length;
+
+// Zoom
+const g = svg.append('g');
+const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', (event) => g.attr('transform', event.transform));
+svg.call(zoom);
+
+// Arrow markers
+const defs = svg.append('defs');
+Object.entries(LAYERS).forEach(([key, layer]) => {
+  defs.append('marker')
+    .attr('id', `arrow-${key}`)
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', 20)
+    .attr('refY', 0)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M0,-4L10,0L0,4')
+    .attr('fill', layer.color)
+    .attr('opacity', 0.4);
+});
+
+// Edge types styling
+const edgeStyles = {
+  call: { dash: null, opacity: 0.25 },
+  uses: { dash: '3,3', opacity: 0.15 },
+  implements: { dash: '8,4', opacity: 0.2 },
+  depends: { dash: '2,2', opacity: 0.15 },
+  parallel: { dash: '6,2', opacity: 0.12 },
+};
+
+// Links
+const linkGroup = g.append('g').attr('class', 'links');
+const link = linkGroup.selectAll('line')
+  .data(graphEdges)
+  .join('line')
+  .attr('class', 'link')
+  .attr('stroke', d => {
+    const src = typeof d.source === 'object' ? d.source : nodeMap[d.source];
+    return src ? LAYERS[src.layer]?.color || '#333' : '#333';
+  })
+  .attr('stroke-opacity', d => edgeStyles[d.type]?.opacity || 0.2)
+  .attr('stroke-width', d => d.type === 'implements' ? 1.5 : 1)
+  .attr('stroke-dasharray', d => edgeStyles[d.type]?.dash || null)
+  .attr('marker-end', d => {
+    const src = typeof d.source === 'object' ? d.source : nodeMap[d.source];
+    return src ? `url(#arrow-${src.layer})` : '';
+  });
+
+// Link labels
+const linkLabelGroup = g.append('g');
+const linkLabel = linkLabelGroup.selectAll('text')
+  .data(graphEdges.filter(e => e.type === 'call'))
+  .join('text')
+  .attr('class', 'link-label')
+  .text(d => d.label);
+
+// Nodes
+const nodeGroup = g.append('g').attr('class', 'nodes');
+const node = nodeGroup.selectAll('g')
+  .data(graphNodes)
+  .join('g')
+  .attr('class', 'node-group')
+  .call(d3.drag()
+    .on('start', dragstarted)
+    .on('drag', dragged)
+    .on('end', dragended));
+
+// Pulse rings for visited nodes
+node.append('circle')
+  .attr('class', 'pulse-ring')
+  .attr('r', d => Math.min(4 + getVisitCount(d.id) * 1.5, 16))
+  .attr('fill', d => LAYERS[d.layer]?.color || '#fff')
+  .attr('opacity', d => getVisitCount(d.id) > 0 ? 0.25 : 0);
+
+// Main circles
+node.append('circle')
+  .attr('class', 'node-circle')
+  .attr('r', d => {
+    const base = d.methods.length > 0 ? 8 : 5;
+    return base + Math.min(getVisitCount(d.id) * 0.5, 6);
+  })
+  .attr('fill', d => LAYERS[d.layer]?.color || '#fff')
+  .attr('fill-opacity', d => 0.6 + Math.min(getVisitCount(d.id) * 0.04, 0.4))
+  .attr('stroke', d => LAYERS[d.layer]?.color || '#fff')
+  .attr('stroke-width', 1.5)
+  .attr('stroke-opacity', 0.4);
+
+// Labels
+node.append('text')
+  .attr('class', 'node-label')
+  .attr('dy', d => (d.methods.length > 0 ? 8 : 5) + 14)
+  .text(d => d.id.replace('.vue','').replace('.ts','').replace('.js','').replace('.java',''))
+  .attr('fill', d => {
+    const c = getVisitCount(d.id);
+    return c > 3 ? LAYERS[d.layer]?.color : '#7888a8';
+  })
+  .attr('font-weight', d => getVisitCount(d.id) > 2 ? 600 : 400);
+
+// Tooltip
+const tooltip = d3.select('#tooltip');
+
+node.on('mouseover', function(event, d) {
+  const html = `<b>${d.id}</b><br><span style="color:#7888a8">${d.desc}</span><br><span style="color:#556080">${d.methods.length} methods</span>`;
+  tooltip.html(html).style('display', 'block');
+  tooltip.style('left', (event.pageX + 12) + 'px').style('top', (event.pageY - 10) + 'px');
+  highlightConnected(d.id);
+}).on('mousemove', function(event) {
+  tooltip.style('left', (event.pageX + 12) + 'px').style('top', (event.pageY - 10) + 'px');
+}).on('mouseout', function() {
+  tooltip.style('display', 'none');
+  resetHighlight();
+});
+
+node.on('click', function(event, d) {
+  event.stopPropagation();
+  recordVisit(d.id);
+  showDetail(d);
+  highlightPath(d.id);
+});
+
+svg.on('click', () => { closeDetail(); resetHighlight(); });
+
+function highlightConnected(nodeId) {
+  const connected = new Set([nodeId]);
+  graphEdges.forEach(e => {
+    const s = typeof e.source === 'object' ? e.source.id : e.source;
+    const t = typeof e.target === 'object' ? e.target.id : e.target;
+    if (s === nodeId) connected.add(t);
+    if (t === nodeId) connected.add(s);
+  });
+
+  node.select('.node-circle')
+    .attr('fill-opacity', d => connected.has(d.id) ? 0.9 : 0.1)
+    .attr('stroke-opacity', d => connected.has(d.id) ? 0.8 : 0.1);
+  node.select('.node-label')
+    .attr('fill-opacity', d => connected.has(d.id) ? 1 : 0.2)
+    .attr('font-weight', d => connected.has(d.id) ? 600 : 400);
+
+  link.attr('stroke-opacity', d => {
+    const s = typeof d.source === 'object' ? d.source.id : d.source;
+    const t = typeof d.target === 'object' ? d.target.id : d.target;
+    return (s === nodeId || t === nodeId) ? 0.6 : 0.03;
+  }).attr('stroke-width', d => {
+    const s = typeof d.source === 'object' ? d.source.id : d.source;
+    const t = typeof d.target === 'object' ? d.target.id : d.target;
+    return (s === nodeId || t === nodeId) ? 2 : 1;
+  });
+
+  linkLabel.attr('fill-opacity', d => {
+    const s = typeof d.source === 'object' ? d.source.id : d.source;
+    const t = typeof d.target === 'object' ? d.target.id : d.target;
+    return (s === nodeId || t === nodeId) ? 1 : 0;
+  });
+}
+
+function highlightPath(nodeId) {
+  // Find self-learning related nodes
+  const affinityNodes = Object.entries(learningState.affinity[nodeId] || {}).sort((a,b) => b[1] - a[1]).slice(0,3).map(e => e[0]);
+  if (affinityNodes.length > 0) {
+    // Add subtle glow to affinity nodes
+    node.select('.pulse-ring')
+      .attr('opacity', d => affinityNodes.includes(d.id) ? 0.4 : (getVisitCount(d.id) > 0 ? 0.25 : 0))
+      .attr('fill', d => affinityNodes.includes(d.id) ? '#ce93d8' : LAYERS[d.layer]?.color || '#fff');
+  }
+}
+
+function resetHighlight() {
+  node.select('.node-circle')
+    .attr('fill-opacity', d => 0.6 + Math.min(getVisitCount(d.id) * 0.04, 0.4))
+    .attr('stroke-opacity', 0.4);
+  node.select('.node-label')
+    .attr('fill-opacity', 1)
+    .attr('font-weight', d => getVisitCount(d.id) > 2 ? 600 : 400);
+  link.attr('stroke-opacity', d => edgeStyles[d.type]?.opacity || 0.2).attr('stroke-width', d => d.type === 'implements' ? 1.5 : 1);
+  linkLabel.attr('fill-opacity', 1);
+  node.select('.pulse-ring')
+    .attr('opacity', d => getVisitCount(d.id) > 0 ? 0.25 : 0)
+    .attr('fill', d => LAYERS[d.layer]?.color || '#fff');
+}
+
+// Detail Panel
+function showDetail(d) {
+  const panel = document.getElementById('detail-panel');
+  const content = document.getElementById('detail-content');
+  const visitCount = getVisitCount(d.id);
+  const layerInfo = LAYERS[d.layer];
+
+  // Find connected nodes
+  const incoming = [], outgoing = [];
+  graphEdges.forEach(e => {
+    const s = typeof e.source === 'object' ? e.source.id : e.source;
+    const t = typeof e.target === 'object' ? e.target.id : e.target;
+    if (s === d.id) outgoing.push({ target: t, label: e.label, type: e.type });
+    if (t === d.id) incoming.push({ source: s, label: e.label, type: e.type });
+  });
+
+  // Self-learning: find related nodes by co-visits
+  const related = Object.entries(learningState.affinity[d.id] || {}).sort((a,b) => b[1] - a[1]).slice(0,5);
+
+  let html = `
+    <h2>${d.id}</h2>
+    <div class="file-path">${d.file}</div>
+    <div style="margin-bottom:8px;">
+      <span class="tag" style="background:${layerInfo.color}22;color:${layerInfo.color};border:1px solid ${layerInfo.color}44">${layerInfo.label}</span>
+      ${d.isInterface ? '<span class="tag" style="background:#ffab9122;color:#ffab91;border:1px solid #ffab9144">Interface</span>' : ''}
+      ${visitCount > 0 ? `<span class="learning-badge">&#9733; Explored ${visitCount}x</span>` : ''}
+    </div>
+    <div class="section">
+      <div class="section-title">Description</div>
+      <div style="font-size:12px;color:#a0b0d0;">${d.desc}</div>
+    </div>`;
+
+  if (d.api && d.api.length > 0) {
+    html += `<div class="section"><div class="section-title">API Endpoints</div>`;
+    d.api.forEach(a => html += `<div style="font-size:11px;color:#4dd0e1;font-family:monospace;padding:2px 0;">${a}</div>`);
+    html += '</div>';
+  }
+
+  if (d.methods.length > 0) {
+    html += `<div class="section"><div class="section-title">Methods (${d.methods.length})</div>`;
+    d.methods.forEach(m => html += `<span class="tag" style="background:rgba(100,181,246,0.08);color:#8ab4f8;border:1px solid rgba(100,181,246,0.15)">${m}</span>`);
+    html += '</div>';
+  }
+
+  if (outgoing.length > 0) {
+    html += `<div class="section"><div class="section-title">Calls (${outgoing.length})</div>`;
+    outgoing.forEach(o => html += `<div class="dep-item" onclick="navigateTo('${o.target}')">&#8594; ${o.target} <span style="color:#556080;font-size:10px;">${o.label}</span></div>`);
+    html += '</div>';
+  }
+
+  if (incoming.length > 0) {
+    html += `<div class="section"><div class="section-title">Called by (${incoming.length})</div>`;
+    incoming.forEach(i => html += `<div class="dep-item" onclick="navigateTo('${i.source}')">&#8592; ${i.source} <span style="color:#556080;font-size:10px;">${i.label}</span></div>`);
+    html += '</div>';
+  }
+
+  if (related.length > 0) {
+    html += `<div class="section"><div class="section-title" style="color:#ce93d8;">Frequently Explored Together</div>`;
+    related.forEach(([id, count]) => html += `<div class="dep-item" onclick="navigateTo('${id}')">&#9733; ${id} <span style="color:#ce93d8;font-size:10px;">${count}x co-visit</span></div>`);
+    html += '</div>';
+  }
+
+  content.innerHTML = html;
+  panel.classList.add('visible');
+}
+
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('visible');
+}
+
+function navigateTo(nodeId) {
+  const target = nodeMap[nodeId];
+  if (target) {
+    recordVisit(nodeId);
+    showDetail(target);
+    highlightConnected(nodeId);
+  }
+}
+
+// Search
+const searchInput = document.getElementById('search-input');
+searchInput.addEventListener('input', function() {
+  const q = this.value.toLowerCase().trim();
+  if (!q) { resetHighlight(); return; }
+  const matches = new Set();
+  graphNodes.forEach(n => {
+    if (n.id.toLowerCase().includes(q) || n.desc.includes(q) || n.file.toLowerCase().includes(q) ||
+        n.methods.some(m => m.toLowerCase().includes(q))) {
+      matches.add(n.id);
+    }
+  });
+  node.select('.node-circle')
+    .attr('fill-opacity', d => matches.has(d.id) ? 1 : 0.08)
+    .attr('stroke-opacity', d => matches.has(d.id) ? 1 : 0.08);
+  node.select('.node-label')
+    .attr('fill-opacity', d => matches.has(d.id) ? 1 : 0.1)
+    .attr('font-weight', d => matches.has(d.id) ? 700 : 400);
+  link.attr('stroke-opacity', 0.03);
+});
+
+// Layer panel
+const layerListEl = document.getElementById('layer-list');
+const activeLayers = new Set(Object.keys(LAYERS));
+
+Object.entries(LAYERS).forEach(([key, layer]) => {
+  const count = graphNodes.filter(n => n.layer === key).length;
+  const item = document.createElement('div');
+  item.className = 'layer-item active';
+  item.innerHTML = `<span class="swatch" style="background:${layer.color}"></span><span>${layer.label}</span><span class="count">${count}</span>`;
+  item.onclick = () => {
+    if (activeLayers.has(key)) { activeLayers.delete(key); item.classList.remove('active'); }
+    else { activeLayers.add(key); item.classList.add('active'); }
+    applyLayerFilter();
+  };
+  layerListEl.appendChild(item);
+});
+
+function applyLayerFilter() {
+  node.style('display', d => activeLayers.has(d.layer) ? null : 'none');
+  link.style('display', d => {
+    const s = typeof d.source === 'object' ? d.source : nodeMap[d.source];
+    const t = typeof d.target === 'object' ? d.target : nodeMap[d.target];
+    return (activeLayers.has(s.layer) && activeLayers.has(t.layer)) ? null : 'none';
+  });
+}
+
+// Force simulation
+const simulation = d3.forceSimulation(graphNodes)
+  .force('link', d3.forceLink(graphEdges).id(d => d.id).distance(120).strength(0.3))
+  .force('charge', d3.forceManyBody().strength(-400))
+  .force('center', d3.forceCenter(width / 2, height / 2))
+  .force('collision', d3.forceCollide().radius(30))
+  .force('x', d3.forceX(width / 2).strength(0.03))
+  .force('y', d3.forceY(height / 2).strength(0.03))
+  .on('tick', ticked);
+
+function ticked() {
+  link
+    .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+  linkLabel
+    .attr('x', d => (d.source.x + d.target.x) / 2)
+    .attr('y', d => (d.source.y + d.target.y) / 2 - 4);
+  node.attr('transform', d => `translate(${d.x},${d.y})`);
+}
+
+function dragstarted(event, d) {
+  if (!event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x; d.fy = d.y;
+}
+function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+function dragended(event, d) {
+  if (!event.active) simulation.alphaTarget(0);
+  d.fx = null; d.fy = null;
+}
+
+// Center the view
+// Start zoomed out a bit so labels are readable
+setTimeout(() => {
+  svg.transition().duration(800).call(zoom.transform, d3.zoomIdentity.translate(width*0.08, height*0.12).scale(0.75));
+}, 1000);
+
+// Periodic "neural pulse" animation on random edges
+setInterval(() => {
+  if (graphEdges.length === 0) return;
+  const e = graphEdges[Math.floor(Math.random() * graphEdges.length)];
+  const src = typeof e.source === 'object' ? e.source : nodeMap[e.source];
+  if (!src) return;
+  const pulseG = g.append('circle')
+    .attr('cx', src.x).attr('cy', src.y)
+    .attr('r', 3)
+    .attr('fill', 'none')
+    .attr('stroke', LAYERS[src.layer]?.color || '#fff')
+    .attr('stroke-width', 1.5)
+    .attr('opacity', 0.6);
+  pulseG.transition().duration(1200)
+    .attr('r', 16)
+    .attr('opacity', 0)
+    .remove();
+}, 2000);
+
+// Initial learning panel update
+updateLearningPanel();
+</script>
+</body>
+</html>

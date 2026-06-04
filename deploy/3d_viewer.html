@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数字园区 - 三维场景</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+    #viewer { width: 100%; height: 100%; }
+    .loading-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(2, 11, 26, 0.95); display: flex; flex-direction: column;
+      align-items: center; justify-content: center; z-index: 9999; color: #00f2fe;
+    }
+    .loading-overlay.hidden { display: none; }
+    .loading-spinner {
+      width: 60px; height: 60px; border: 3px solid rgba(0, 242, 254, 0.2);
+      border-top-color: #00f2fe; border-radius: 50%; animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 16px; letter-spacing: 2px; }
+    .toolbar {
+      position: fixed; top: 20px; left: 20px; z-index: 100;
+      background: rgba(6, 30, 61, 0.9); border: 1px solid #1a3a61;
+      padding: 12px; border-radius: 4px; color: #fff; font-family: "Microsoft YaHei", sans-serif;
+    }
+    .toolbar h3 { color: #00f2fe; font-size: 14px; margin-bottom: 10px; }
+    .toolbar label {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+      font-size: 13px; cursor: pointer; color: #ccc;
+    }
+    .toolbar label:hover { color: #00f2fe; }
+    .back-btn {
+      position: fixed; top: 20px; right: 20px; z-index: 100;
+      background: rgba(6, 30, 61, 0.9); border: 1px solid #1a3a61;
+      color: #00f2fe; padding: 8px 16px; border-radius: 4px;
+      cursor: pointer; font-size: 13px; text-decoration: none;
+    }
+    .info-panel {
+      position: fixed; bottom: 20px; left: 20px; z-index: 100;
+      background: rgba(6, 30, 61, 0.9); border: 1px solid #1a3a61;
+      padding: 10px 14px; border-radius: 4px; color: #8492a6; font-size: 12px;
+      font-family: "Microsoft YaHei", sans-serif;
+    }
+    .error-panel {
+      position: fixed; bottom: 20px; right: 20px; z-index: 100;
+      background: rgba(60, 10, 10, 0.9); border: 1px solid #f56c6c;
+      padding: 10px 14px; border-radius: 4px; color: #f56c6c; font-size: 12px;
+      font-family: "Microsoft YaHei", sans-serif; max-width: 400px; display: none;
+    }
+    .log-panel {
+      position: fixed; top: 200px; left: 20px; z-index: 100;
+      background: rgba(6, 30, 61, 0.9); border: 1px solid #1a3a61;
+      padding: 10px; border-radius: 4px; color: #8492a6; font-size: 11px;
+      font-family: monospace; max-height: 300px; overflow-y: auto; max-width: 350px;
+    }
+  </style>
+  <link rel="stylesheet" href="/cesium/widgets.css">
+  <script src="/cesium/Cesium.js"></script>
+</head>
+<body>
+  <div id="viewer"></div>
+
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">三维场景加载中...</div>
+  </div>
+
+  <div class="toolbar">
+    <h3>图层控制</h3>
+    <label><input type="checkbox" id="chkRoad" checked> 路面模型</label>
+    <label><input type="checkbox" id="chkEquipment" checked> 生化装置</label>
+    <label><input type="checkbox" id="chkSceneConfig" checked> 场景配置</label>
+    <label><input type="checkbox" id="chkVegetation" checked> 植被</label>
+    <label><input type="checkbox" id="chkTerrain" checked> 地形</label>
+    <label><input type="checkbox" id="chkBuildings" checked> 建筑物</label>
+  </div>
+
+  <a class="back-btn" href="/map">返回数字园区</a>
+
+  <div class="info-panel">
+    <span>鼠标左键旋转 | 滚轮缩放 | 右键平移</span>
+  </div>
+
+  <div class="error-panel" id="errorPanel"></div>
+  <div class="log-panel" id="logPanel"></div>
+
+  <script>
+    var logEl = document.getElementById("logPanel");
+    function log(msg) {
+      console.log("[3D]", msg);
+      logEl.innerHTML += msg + "<br>";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    function showError(msg) {
+      console.error("[3D ERROR]", msg);
+      var el = document.getElementById("errorPanel");
+      el.textContent = msg;
+      el.style.display = "block";
+    }
+    function hideLoading() {
+      document.getElementById("loadingOverlay").classList.add("hidden");
+    }
+    function setLoadingText(t) {
+      document.getElementById("loadingText").textContent = t;
+    }
+
+    // Global error handler
+    window.onerror = function(msg, url, line, col, err) {
+      showError("JS Error: " + msg + " (line " + line + ")");
+      log("JS ERROR: " + msg + " at " + url + ":" + line);
+      return false;
+    };
+    window.addEventListener("unhandledrejection", function(e) {
+      log("Unhandled promise rejection: " + (e.reason || e));
+    });
+
+    if (typeof Cesium === "undefined") {
+      showError("Cesium library failed to load");
+      setLoadingText("Cesium 加载失败");
+    } else {
+      log("Cesium loaded: " + Cesium.VERSION);
+      log("WebGL: " + (!!document.createElement('canvas').getContext('webgl2') || !!document.createElement('canvas').getContext('webgl')));
+      initViewer();
+    }
+
+    function initViewer() {
+      try {
+        Cesium.Ion.defaultAccessToken = undefined;
+        setLoadingText("初始化3D引擎...");
+
+        var viewer = new Cesium.Viewer("viewer", {
+          terrain: false, baseLayer: false, skyBox: false, skyAtmosphere: false,
+          animation: false, timeline: false, geocoder: false, homeButton: false,
+          sceneModePicker: false, navigationHelpButton: false, fullscreenButton: false,
+          selectionIndicator: false, infoBox: false
+        });
+
+        viewer.imageryLayers.removeAll();
+        viewer.scene.backgroundColor = new Cesium.Color(0.02, 0.07, 0.15, 1);
+
+        log("Viewer created, scene mode: " + viewer.scene.mode);
+        log("S3MTilesLayer available: " + (typeof Cesium.S3MTilesLayer));
+        log("addS3MTilesetLayer: " + (typeof viewer.scene.addS3MTilesetLayer));
+        log("addS3MTilesLayerByScp: " + (typeof viewer.scene.addS3MTilesLayerByScp));
+
+        // SCP positions use local meters, library interprets as degrees
+        // Road layer: lon=4.2667, lat=-12.0410 → model placed at WGS84 (4.2667°, -12.0410°)
+        var modelLon = 4.2667;
+        var modelLat = -12.0410;
+
+        var modelCart = Cesium.Cartesian3.fromDegrees(modelLon, modelLat, 500);
+        viewer.camera.setView({
+          destination: modelCart,
+          orientation: {
+            heading: Cesium.Math.toRadians(0),
+            pitch: Cesium.Math.toRadians(-60),
+            roll: 0
+          }
+        });
+        log("Camera set to (" + modelLon + ", " + modelLat + ", 500)");
+
+        var LAYER_CONFIG = [
+          { id: "road", url: "/3d_viewer/ground/road/road.xml", name: "路面模型", chk: "chkRoad" },
+          { id: "equipment", url: "/3d_viewer/ground/equipment/equipment.xml", name: "生化装置", chk: "chkEquipment" },
+          { id: "sceneConfig", url: "/3d_viewer/ground/scene_config/scene_config.xml", name: "场景配置", chk: "chkSceneConfig" },
+          { id: "vegetation", url: "/3d_viewer/building/vegetation/vegetation.xml", name: "植被模型", chk: "chkVegetation" },
+          { id: "terrain", url: "/3d_viewer/building/terrain/terrain.xml", name: "地形", chk: "chkTerrain" },
+          { id: "buildings", url: "/3d_viewer/building/buildings/buildings.xml", name: "建筑物", chk: "chkBuildings" },
+        ];
+
+        var layers = {};
+        var loadedCount = 0;
+
+        function onLayerReady(layer, cfg) {
+          layers[cfg.id] = layer;
+          loadedCount++;
+          log("Layer ready: " + cfg.name + " (" + loadedCount + "/" + LAYER_CONFIG.length + ")");
+
+          var chk = document.getElementById(cfg.chk);
+          if (chk) {
+            chk.addEventListener("change", function(e) {
+              if (layers[cfg.id]) {
+                layers[cfg.id].visible = e.target.checked;
+              }
+            });
+          }
+
+          if (loadedCount >= LAYER_CONFIG.length) {
+            setLoadingText("加载完成");
+            log("All layers processed");
+            setTimeout(hideLoading, 500);
+          }
+        }
+
+        function loadNext(index) {
+          if (index >= LAYER_CONFIG.length) return;
+
+          var cfg = LAYER_CONFIG[index];
+          setLoadingText("加载: " + cfg.name + " (" + (index+1) + "/" + LAYER_CONFIG.length + ")");
+          log("Loading: " + cfg.name + " from " + cfg.url);
+
+          // Method 1: Try addS3MTilesetLayer (scene method)
+          try {
+            if (typeof viewer.scene.addS3MTilesetLayer === "function") {
+              log("Using scene.addS3MTilesetLayer()");
+              var result = viewer.scene.addS3MTilesetLayer(cfg.url, {
+                name: cfg.name
+              }, index);
+              log("addS3MTilesetLayer returned: " + typeof result);
+
+              if (result && typeof result.then === "function") {
+                result.then(function(layer) {
+                  onLayerReady(layer, cfg);
+                }).otherwise(function(e) {
+                  log("addS3MTilesetLayer rejected: " + (e && e.message || e));
+                  // Fallback to Method 2
+                  tryMethod2(cfg, index);
+                });
+              } else {
+                onLayerReady(result, cfg);
+              }
+              return;
+            }
+          } catch(e) {
+            log("Method 1 failed: " + e.message);
+          }
+
+          tryMethod2(cfg, index);
+        }
+
+        function tryMethod2(cfg, index) {
+          // Method 2: Try addS3MTilesLayerByScp (scene method)
+          try {
+            if (typeof viewer.scene.addS3MTilesLayerByScp === "function") {
+              log("Using scene.addS3MTilesLayerByScp()");
+              var result = viewer.scene.addS3MTilesLayerByScp(cfg.url, {
+                name: cfg.name
+              }, index, true);
+              log("addS3MTilesLayerByScp returned: " + typeof result);
+
+              if (result && typeof result.then === "function") {
+                result.then(function(layer) {
+                  onLayerReady(layer, cfg);
+                }).otherwise(function(e) {
+                  log("addS3MTilesLayerByScp rejected: " + (e && e.message || e));
+                  tryMethod3(cfg, index);
+                });
+              } else {
+                onLayerReady(result, cfg);
+              }
+              return;
+            }
+          } catch(e) {
+            log("Method 2 failed: " + e.message);
+          }
+
+          tryMethod3(cfg, index);
+        }
+
+        function tryMethod3(cfg, index) {
+          // Method 3: Manual S3MTilesLayer creation with full config
+          try {
+            log("Using manual S3MTilesLayer creation");
+            var layer = new Cesium.S3MTilesLayer({
+              name: cfg.name,
+              url: cfg.url,
+              context: viewer.scene.context,
+              gl: viewer.scene.context._gl,
+              scene: viewer.scene,
+              autoSettinigs: true,
+              skipTilesetRequest: true
+            });
+            viewer.scene.layers.add(layer, index);
+            onLayerReady(layer, cfg);
+          } catch(e) {
+            log("Method 3 failed: " + e.message);
+            // Continue to next layer
+          }
+
+          setTimeout(function() { loadNext(index + 1); }, 500);
+        }
+
+        // Start loading after a short delay
+        setTimeout(function() {
+          // Load first layer to test
+          loadNext(0);
+          // Load remaining layers sequentially
+          for (var i = 1; i < LAYER_CONFIG.length; i++) {
+            (function(idx) {
+              setTimeout(function() { loadNext(idx); }, 500 * (idx + 1));
+            })(i);
+          }
+        }, 1000);
+
+      } catch (e) {
+        showError("初始化失败: " + e.message);
+        setLoadingText("初始化失败");
+        log("Init error: " + e.message);
+        log("Stack: " + e.stack);
+      }
+    }
+  </script>
+</body>
+</html>

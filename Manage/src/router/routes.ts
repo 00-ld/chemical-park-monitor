@@ -43,6 +43,15 @@ export const constantRoute = [
           icon: 'HomeFilled',
         },
       },
+      {
+        path: '/map_test',
+        component: () => import('@/views/map_test/map_test.vue'),
+        meta: {
+          title: '智慧地图',
+          hidden: false,
+          icon: 'Platform',
+        },
+      },
     ],
   },
   {
@@ -63,16 +72,6 @@ export const constantRoute = [
     meta: {
       hidden: false,
       title: '数字园区',
-      icon: 'Platform',
-    },
-  },
-  {
-    path: '/map_test',
-    component: () => import('@/views/map_test/map_test.vue'),
-    name: 'MapTest',
-    meta: {
-      title: '智慧地图',
-      hidden: false,
       icon: 'Platform',
     },
   },
