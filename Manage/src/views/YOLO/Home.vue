@@ -167,7 +167,7 @@ let lineChart: echarts.ECharts | null = null
 
 // 加载数据库全部日志
 const loadLogList = async () => {
-  const res = await axios.get("http://localhost:8081/api/analysis/list")
+  const res = await axios.get((import.meta.env.VITE_APP_BASE_API || '/api') + "/analysis/list")
   detectionLogs.value = res.data.map((item: { id: number; createTime: string; location: string; personCount: number }) => {
     return {
       id: item.id,
@@ -180,7 +180,7 @@ const loadLogList = async () => {
 
 // 删除单条日志
 const delLog = async (id: number) => {
-  await axios.delete(`http://localhost:8081/api/analysis/delete/${id}`)
+  await axios.delete(`(import.meta.env.VITE_APP_BASE_API || '/api')/analysis/delete/${id}`)
   await loadLogList()
   ElMessage.success("删除成功")
 }
@@ -258,7 +258,7 @@ const analyzeImage = async (file: File) => {
   formData.append('file', file)
   const start = Date.now()
   try {
-    const res = await axios.post('http://localhost:8081/api/analysis/person', formData)
+    const res = await axios.post(`${import.meta.env.VITE_APP_BASE_API || '/api'}/analysis/person`, formData)
     if (res.data.status === 'success') {
       resultImage.value = res.data.image_base64
       analysisTime.value = Date.now() - start

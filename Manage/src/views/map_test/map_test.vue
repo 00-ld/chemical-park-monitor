@@ -1,33 +1,5 @@
 <template>
   <div class="chempark-container">
-    <header class="top-bar">
-      <div class="logo">
-        <div class="logo-icon"><i class="fas fa-industry"></i></div>
-        <div>
-          <div class="logo-text">CHEMPARK</div>
-          <div class="logo-sub">工业园区智慧地图平台</div>
-        </div>
-      </div>
-      <button class="back-home-btn" @click="goBackHome" title="返回主页">
-        <i class="fas fa-home"></i>
-        <span>返回主页</span>
-      </button>
-      <div class="status-group">
-        <div class="status-item">
-          <div class="status-dot green"></div>
-          <span>系统在线</span>
-        </div>
-        <div class="status-item">
-          <div class="status-dot orange"></div>
-          <span>{{ alerts.length }} 项告警</span>
-        </div>
-        <div class="status-item" style="color:var(--fg);font-family:'Orbitron',sans-serif;font-size:11px;">
-          <i class="fas fa-clock" style="color:var(--accent);font-size:10px;"></i>
-          <span>{{ clock }}</span>
-        </div>
-      </div>
-    </header>
-
     <div class="main-layout">
       <aside class="left-panel">
         <div class="panel-section">
@@ -396,7 +368,11 @@
         <div class="info-header">
           <div>
             <h2>{{ infoTitle }}</h2>
-            <div style="margin-top:4px;" v-html="infoSubtitle"></div>
+            <div style="margin-top:4px;">
+              <span v-if="infoSubtitle.text" :style="{ color: infoSubtitle.color }">{{ infoSubtitle.text }}</span>
+              <span v-if="infoSubtitle.tag" :class="infoSubtitle.tagClass" style="margin-left:4px;">{{ infoSubtitle.tag }}</span>
+              <span v-if="infoSubtitle.desc" style="color:var(--fg-muted);font-size:12px;margin-left:4px;">{{ infoSubtitle.desc }}</span>
+            </div>
           </div>
           <button class="close-btn" @click="closeInfo"><i class="fas fa-times"></i></button>
         </div>
@@ -404,8 +380,11 @@
           <template v-if="selectedFacility || selectedSensor || selectedCar">
             <div v-for="(row, idx) in infoRows" :key="idx" class="info-row">
               <span class="info-key">{{ row.key }}</span>
-              <span class="info-val" v-if="row.isHtml" v-html="row.val"></span>
-              <span class="info-val" v-else>{{ row.val }}</span>
+              <span class="info-val" v-if="row.action" @click="row.action" style="cursor:pointer;">
+                <button class="info-car-btn" :class="row.btnClass">{{ row.val }}</button>
+              </span>
+              <span class="info-val" v-else-if="row.tag" :class="row.tagClass">{{ row.val }}</span>
+              <span class="info-val" v-else :style="row.style || {}">{{ row.val }}</span>
             </div>
             <!-- YOLO 检测结果 -->
             <div v-if="selectedCar && yoloResult && yoloResult.carId === selectedCar.id" class="yolo-result-card">
@@ -1516,7 +1495,7 @@ function navigateToCarDetail(carId) {
 
 function showCarInfo(car) {
   infoTitle.value = `小车 ${car.id}`
-  infoSubtitle.value = `<span style="color:${car.status === 'warning' ? '#ef4444' : '#00e5a0'}">● ${car.status === 'warning' ? '异常' : '正常'}</span>`
+  infoSubtitle.value = { text: `● ${car.status === 'warning' ? '异常' : '正常'}`, color: car.status === 'warning' ? '#ef4444' : '#00e5a0' }
   const gasName = ['', '可燃气体 (CH₄)', '有毒气体 (H₂S)', 'CO气体', '氧气 (O₂)'][car.id] || '--'
   const threshold = carStore.gasThreshold[car.id]
   const thresholdText = threshold
@@ -1530,18 +1509,17 @@ function showCarInfo(car) {
     { key: '监测气体', val: gasName },
     { key: '状态', val: car.status === 'warning' ? '⚠ 预警' : '✓ 正常' },
     { key: '报警阈值', val: thresholdText },
-    { key: '操作', val: `<button class="info-car-btn" onclick="window.__navigateToCarDetail(${car.id})">查看详情 →</button>`, isHtml: true },
-    { key: '设警', val: `<button class="info-car-btn warning-btn" onclick="window.__toggleCarWarning(${car.id})">${car.status === 'warning' ? '重置状态' : '设警'}</button>`, isHtml: true },
-    { key: 'AI巡检', val: `<button class="info-car-btn" onclick="window.__triggerYoloForCar(${car.id})">YOLO 检测 →</button>`, isHtml: true },
+    { key: '操作', val: '查看详情 →', action: () => navigateToCarDetail(car.id) },
+    { key: '设警', val: car.status === 'warning' ? '重置状态' : '设警', action: () => toggleCarWarning(car.id), btnClass: 'warning-btn' },
+    { key: 'AI巡检', val: 'YOLO 检测 →', action: () => triggerYoloForCar(car.id), btnClass: 'warning-btn' },
   ]
   selectedFacility.value = null
   selectedSensor.value = null
   render()
 }
 
-// 暴露给内联 HTML 按钮
-window.__navigateToCarDetail = (id) => navigateToCarDetail(id)
-window.__triggerYoloForCar = async (carId) => {
+// 触发 YOLO 检测（小车按钮调用）
+const triggerYoloForCar = async (carId) => {
   const car = carStore.carList.find(c => c.id === carId)
   if (!car) return
   showToast(`小车 ${carId} YOLO 检测中...`, 'success')
@@ -1568,7 +1546,7 @@ window.__triggerYoloForCar = async (carId) => {
       const formData = new FormData()
       formData.append('file', blob, `car_${carId}_capture.png`)
       try {
-        const res = await fetch('http://localhost:8081/api/analysis/person', { method: 'POST', body: formData })
+        const res = await fetch((import.meta.env.VITE_APP_BASE_API || '/api') + '/analysis/person', { method: 'POST', body: formData })
         const data = await res.json()
         if (data.status === 'success') {
           yoloResult.value = { carId, count: data.count, imageBase64: data.image_base64, timestamp: Date.now() }
@@ -1589,7 +1567,8 @@ window.__triggerYoloForCar = async (carId) => {
     showToast('YOLO 检测失败: ' + err.message, 'warn')
   }
 }
-window.__toggleCarWarning = async (id) => {
+// 切换小车预警状态
+const toggleCarWarning = async (id) => {
   const car = carStore.carList.find(c => c.id === id)
   if (!car) return
   try {
@@ -2095,7 +2074,7 @@ let lastAnimTime = 0
 /** 从后端加载所有已保存的传感器 */
 async function fetchSensorsFromDB() {
   try {
-    const resp = await fetch('http://localhost:8081/api/sensor/list')
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/list`)
     const data = await resp.json()
     if (data.code === 200 && Array.isArray(data.data)) {
       sensors.value = buildActiveSensorSeries(data.data, diffusionFrames.value)
@@ -2109,7 +2088,7 @@ async function fetchSensorsFromDB() {
 /** 保存传感器到后端 */
 async function saveSensorToDB(sensor) {
   try {
-    const resp = await fetch('http://localhost:8081/api/sensor/add', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2143,7 +2122,7 @@ async function saveSensorToDB(sensor) {
 /** 更新传感器参数到后端 */
 async function updateSensorToDB(sensor) {
   try {
-    const resp = await fetch('http://localhost:8081/api/sensor/update', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2173,7 +2152,7 @@ async function updateSensorToDB(sensor) {
 /** 从后端删除传感器 */
 async function deleteSensorFromDB(id) {
   try {
-    const resp = await fetch('http://localhost:8081/api/sensor/delete', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -2199,7 +2178,7 @@ async function deleteAllSensorsFromDB() {
 /** 从后端加载气体类型列表 */
 async function fetchGasList() {
   try {
-    const resp = await fetch('http://localhost:8081/api/gas/list')
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/list`)
     const data = await resp.json()
     if (data.code === 200 && Array.isArray(data.data)) {
       gases.value = data.data
@@ -2212,7 +2191,7 @@ async function fetchGasList() {
 /** 保存气体类型到后端 */
 async function saveGasToDB(gas) {
   try {
-    const resp = await fetch('http://localhost:8081/api/gas/add', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/add`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(gas)
@@ -2231,7 +2210,7 @@ async function saveGasToDB(gas) {
 /** 更新气体类型到后端 */
 async function updateGasToDB(gas) {
   try {
-    const resp = await fetch('http://localhost:8081/api/gas/update', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(gas)
@@ -2250,7 +2229,7 @@ async function updateGasToDB(gas) {
 /** 从后端删除气体类型 */
 async function deleteGasFromDB(id) {
   try {
-    const resp = await fetch('http://localhost:8081/api/gas/delete', {
+    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -3953,23 +3932,23 @@ function selectZone(zoneId) {
 function showFacilityInfo(f) {
   panelCollapsed.value = false
   infoTitle.value = f.name
-  infoSubtitle.value = `<span class="tag ${statusTagClass(f.status)}">${f.status}</span><span style="color:var(--fg-muted);font-size:12px;margin-left:4px;">${f.desc || ''}</span>`
+  infoSubtitle.value = { tag: f.status, tagClass: statusTagClass(f.status), desc: f.desc || '' }
   const rows = []
   if (f.type === 'tank') {
     rows.push({key: '储罐编号', val: f.id.toUpperCase()})
     rows.push({key: '所属区域', val: getZoneName(f.zone)})
     rows.push({key: '容量', val: f.capacity})
     rows.push({key: '存储介质', val: f.material})
-    rows.push({key: '液位', val: `<span style="color:${f.level > 85 ? 'var(--danger)' : 'var(--accent)'}">${f.level}%</span>`, isHtml: true})
-    rows.push({key: '温度', val: `<span style="color:${f.temp > 80 ? 'var(--warning)' : 'var(--fg)'}">${f.temp}℃</span>`, isHtml: true})
-    rows.push({key: '状态', val: `<span class="tag ${statusTagClass(f.status)}">${f.status}</span>`, isHtml: true})
+    rows.push({key: '液位', val: `${f.level}%`, style: { color: f.level > 85 ? 'var(--danger)' : 'var(--accent)' }})
+    rows.push({key: '温度', val: `${f.temp}℃`, style: { color: f.temp > 80 ? 'var(--warning)' : 'var(--fg)' }})
+    rows.push({key: '状态', val: f.status, tag: true, tagClass: statusTagClass(f.status)})
   } else if (f.type === 'tower') {
     rows.push({key: '设备编号', val: f.id.toUpperCase()})
     rows.push({key: '所属区域', val: getZoneName(f.zone)})
     rows.push({key: '塔高', val: f.height})
     rows.push({key: '操作压力', val: f.pressure})
     rows.push({key: '操作温度', val: f.temp + '℃'})
-    rows.push({key: '状态', val: `<span class="tag ${statusTagClass(f.status)}">${f.status}</span>`, isHtml: true})
+    rows.push({key: '状态', val: f.status, tag: true, tagClass: statusTagClass(f.status)})
   } else {
     rows.push({key: '建筑编号', val: f.id.toUpperCase()})
     rows.push({key: '所属区域', val: getZoneName(f.zone)})
@@ -3981,13 +3960,13 @@ function showFacilityInfo(f) {
     if (f.flow) rows.push({key: '处理流量', val: f.flow})
     if (f.volume) rows.push({key: '池容', val: f.volume})
     if (f.bays) rows.push({key: '装卸位', val: f.bays + ' 个'})
-    rows.push({key: '状态', val: `<span class="tag ${statusTagClass(f.status)}">${f.status}</span>`, isHtml: true})
+    rows.push({key: '状态', val: f.status, tag: true, tagClass: statusTagClass(f.status)})
   }
   infoRows.value = rows
 }
 function clearInfo() {
   infoTitle.value = '选择设施查看详情'
-  infoSubtitle.value = ''
+  infoSubtitle.value = {}
   infoRows.value = []
   selectedZone.value = ''
   selectedCar.value = null
@@ -5514,7 +5493,7 @@ function showSensorInfo(s){
     : '尚未采样'
 
   infoTitle.value = `${s.id}（${priorityLabel}）`
-  infoSubtitle.value = `<span class="tag tag-blue">${type.name}</span><span style="color:var(--fg-muted);font-size:12px;margin-left:4px;">${modeLabel}</span>`
+  infoSubtitle.value = { tag: type.name, tagClass: 'tag tag-blue', desc: modeLabel }
   infoRows.value = [
     { key:'传感器类型', val: '多种气体传感器' },
     { key:'安装高度', val: `${installationHeight.toFixed(1)} m` },
@@ -5764,69 +5743,19 @@ watch(
   --card: rgba(17,24,39,0.92);
   --border: rgba(122,139,168,0.18);
 }
-.top-bar {
-  position: fixed; top:0; left:0; right:0;
-  height: 56px;
-  background: linear-gradient(180deg, #0a0f1a, #0d1322);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 24px; z-index: 100;
+:deep(.layout_tabbar) {
+  display: none !important;
 }
-.top-bar .logo { display: flex; align-items: center; gap: 12px; }
-.top-bar .logo-icon {
-  width: 36px; height: 36px;
-  background: linear-gradient(135deg, var(--accent), #00b37d);
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; color: var(--bg);
+:deep(.layout_main) {
+  padding: 0 !important;
+  margin-top: 80px !important;
+  background: #0a0f1a !important;
+  overflow: hidden !important;
 }
-.top-bar .logo-text {
-  font-family: 'Orbitron', sans-serif;
-  font-weight: 700; font-size: 16px;
-  letter-spacing: 2px; color: var(--accent);
+:deep(.layout_main::before) {
+  display: none !important;
 }
-.top-bar .logo-sub {
-  font-size: 10px; color: var(--fg-muted); margin-top: 2px;
-}
-.back-home-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: rgba(64, 224, 208, 0.15);
-  border: 1px solid rgba(64, 224, 208, 0.4);
-  border-radius: 8px;
-  color: #40e0d0;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-  backdrop-filter: blur(10px);
-}
-.back-home-btn:hover {
-  background: rgba(64, 224, 208, 0.3);
-  border-color: rgba(64, 224, 208, 0.8);
-  box-shadow: 0 0 15px rgba(64, 224, 208, 0.4);
-  transform: translateY(-1px);
-}
-.back-home-btn i {
-  font-size: 16px;
-}
-.top-bar .logo-sub { font-size: 11px; color: var(--fg-muted); letter-spacing: 1px; }
-.top-bar .status-group { display: flex; align-items: center; gap: 20px; }
-.status-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-muted); }
-.status-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-.status-dot.green { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
-.status-dot.orange { background: var(--warning); box-shadow: 0 0 8px rgba(255,107,53,0.4); }
-@keyframes pulse-dot {
-  0%,100% { opacity:1; transform:scale(1); }
-  50% { opacity:0.6; transform:scale(0.8); }
-}
-.main-layout { display: flex; height: 100vh; padding-top: 56px; }
+.main-layout { display: flex; height: calc(100vh - 80px); }
 .left-panel {
   width: 280px; min-width: 280px;
   background: #111827;

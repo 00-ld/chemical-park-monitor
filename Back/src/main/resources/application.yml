@@ -1,10 +1,12 @@
 spring:
   application:
     name: Test
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:prod}
   datasource:
     url: jdbc:mysql://localhost:3306/chemical?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
   servlet:
     multipart:
       max-file-size: 10MB
@@ -17,7 +19,9 @@ mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.at.pojo
   configuration:
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 生产环境不使用 StdOutImpl（会向 stdout 全量打印含参数的 SQL，泄露敏感数据）；
+    # 改用 Slf4j，由日志级别统一管控
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
     map-underscore-to-camel-case: true
 
 logging:

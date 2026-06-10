@@ -1,0 +1,73 @@
+services:
+  # Nginx - 前端静态文件 + 反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: chemical-nginx
+    ports:
+      - "80:80"
+    environment:
+      # 仅替换 ALGORITHM_API_KEY，避免 envsubst 破坏 nginx 自身的 $host/$remote_addr 等变量
+      - ALGORITHM_API_KEY=${ALGORITHM_API_KEY}
+      - NGINX_ENVSUBST_FILTER=ALGORITHM_API_KEY
+    volumes:
+      # 以模板方式挂载，容器启动时 envsubst 注入密钥后生成最终配置
+      - ./nginx/default.conf:/etc/nginx/templates/default.conf.template:ro
+      - ../Manage/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+      - algorithm
+    restart: always
+
+  # Java 后端
+  backend:
+    image: eclipse-temurin:21-jre-jammy
+    container_name: chemical-backend
+    working_dir: /app
+    volumes:
+      - ./backend/chemical-backend-1.0.0.jar:/app/app.jar
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/chemical?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - ALGORITHM_API_KEY=${ALGORITHM_API_KEY}
+    command: java -jar app.jar
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: always
+
+  # Python 算法服务
+  algorithm:
+    build:
+      context: ../chemical-park-monitor/python
+      dockerfile: ../../deploy/algorithm/Dockerfile
+    container_name: chemical-algorithm
+    environment:
+      - ALGORITHM_API_KEY=${ALGORITHM_API_KEY}
+      - ALGORITHM_CORS_ORIGINS=${ALGORITHM_CORS_ORIGINS:-http://localhost}
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: always
+
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: chemical-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+volumes:
+  mysql_data:

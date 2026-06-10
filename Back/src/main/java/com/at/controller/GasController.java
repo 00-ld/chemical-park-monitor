@@ -14,7 +14,6 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/gas")
-@CrossOrigin
 public class GasController {
 
     @Resource
@@ -28,7 +27,7 @@ public class GasController {
             return ResponseEntity.ok(Result.success(list));
         } catch (Exception e) {
             log.error("查询气体类型失败", e);
-            return ResponseEntity.internalServerError().body(Result.error("查询失败：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("查询失败"));
         }
     }
 
@@ -50,7 +49,7 @@ public class GasController {
             }
         } catch (Exception e) {
             log.error("新增气体类型异常", e);
-            return ResponseEntity.internalServerError().body(Result.error("系统异常：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("系统异常"));
         }
     }
 
@@ -69,7 +68,7 @@ public class GasController {
             }
         } catch (Exception e) {
             log.error("更新气体类型异常", e);
-            return ResponseEntity.internalServerError().body(Result.error("系统异常：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("系统异常"));
         }
     }
 
@@ -89,7 +88,7 @@ public class GasController {
             }
         } catch (Exception e) {
             log.error("删除气体类型异常", e);
-            return ResponseEntity.internalServerError().body(Result.error("系统异常：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("系统异常"));
         }
     }
 }

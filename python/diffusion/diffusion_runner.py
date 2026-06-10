@@ -1,7 +1,8 @@
 """Diffusion simulation runner module.
 
-Orchestrates the phase1 diffusion simulation and applies CFD calibration
-to produce final calibrated results. Designed for Pyodide worker execution.
+Orchestrates the Gaussian-puff diffusion simulation and applies a transparent
+post-processing pass to produce final results. Designed for Pyodide worker
+execution.
 
 Typical usage:
     result = run_diffusion_simulation_task(payload)
@@ -11,14 +12,14 @@ from __future__ import annotations
 
 from typing import Dict
 
-from .cfd_calibrator import apply_cfd_calibration
+from .cfd_calibrator import apply_dispersion_postprocess
 from .phase1_diffusion import create_phase1_diffusion_simulation
 
 
 def run_diffusion_simulation_task(payload: Dict) -> Dict:
-    """Run a full diffusion simulation with CFD calibration.
+    """Run a full diffusion simulation with post-processing.
 
-    Creates the base phase1 simulation, applies CFD calibration factors,
+    Creates the base Gaussian-puff simulation, recomputes summary statistics,
     and appends executor metadata for Pyodide worker tracking.
 
     Args:
@@ -26,13 +27,13 @@ def run_diffusion_simulation_task(payload: Dict) -> Dict:
             stability class, and diffusion configuration.
 
     Returns:
-        Calibrated simulation result with frames, stats, and executor info.
+        Post-processed simulation result with frames, stats, and executor info.
     """
     base_result = create_phase1_diffusion_simulation(payload)
-    calibrated_result = apply_cfd_calibration(base_result, payload)
-    calibrated_result["executor"] = {
+    final_result = apply_dispersion_postprocess(base_result, payload)
+    final_result["executor"] = {
         "mode": "worker-pyodide",
         "runtime": "pyodide-python",
-        "implementation": "python.diffusion.phase1_diffusion+python.diffusion.cfd_calibrator",
+        "implementation": "python.diffusion.gaussian_plume+python.diffusion.phase1_diffusion",
     }
-    return calibrated_result
+    return final_result

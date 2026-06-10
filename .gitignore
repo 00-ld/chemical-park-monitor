@@ -41,7 +41,23 @@ omc/
 .codegraph/
 chemical-park-monitor/
 
+# Build artifacts (large)
+Manage/dist2/
+
+# Sensitive configs
+.codex/
+deploy/upload.py
+deploy/.env
+deploy/migrate_passwords.py
+Back/src/main/resources/application-local.properties
+
 # ML models
 *.pt
 *.pth
 yolo11m.pt
+
+# Generated datasets (large binary)
+*.npy
+
+# Third-party reference docs (large, not source)
+化工园区设备文献/

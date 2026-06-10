@@ -20,7 +20,17 @@ from __future__ import annotations
 import math
 from typing import Dict, List, Optional, Sequence
 
-from diffusion.cfd_calibrator import clamp
+import numpy as np
+
+from diffusion.gaussian_plume import (
+    PlumeParams,
+    briggs_sigma_y,
+    briggs_sigma_z,
+    build_emission_times,
+    choose_emit_step,
+    resolve_environment,
+    transient_ppm_field,
+)
 
 
 MAP_WIDTH = 1000
@@ -28,14 +38,19 @@ MAP_HEIGHT = 650
 GRID_SIZE = 20
 MAP_METERS_PER_UNIT = 0.5
 
-STABILITY_FACTORS = {
-    "A": 1.35,
-    "B": 1.2,
-    "C": 1.05,
-    "D": 0.9,
-    "E": 0.75,
-    "F": 0.62,
-}
+
+def clamp(value: float, minimum: float, maximum: float) -> float:
+    """Clamp a value between a minimum and maximum range.
+
+    Args:
+        value: The input value to clamp.
+        minimum: Lower bound of the range.
+        maximum: Upper bound of the range.
+
+    Returns:
+        The clamped value within [minimum, maximum].
+    """
+    return min(max(value, minimum), maximum)
 
 PHASE1_GASES = [
     {
@@ -43,6 +58,7 @@ PHASE1_GASES = [
         "name": "一氧化碳",
         "color": "#f59e0b",
         "densityRatio": 0.97,
+        "molarMass": 28.01,
         "diffusionBias": 1.05,
         "warningThreshold": 24,
         "dangerThreshold": 60,
@@ -53,6 +69,7 @@ PHASE1_GASES = [
         "name": "硫化氢",
         "color": "#ef4444",
         "densityRatio": 1.19,
+        "molarMass": 34.08,
         "diffusionBias": 0.9,
         "warningThreshold": 8,
         "dangerThreshold": 20,
@@ -63,6 +80,7 @@ PHASE1_GASES = [
         "name": "甲烷",
         "color": "#38bdf8",
         "densityRatio": 0.55,
+        "molarMass": 16.04,
         "diffusionBias": 1.5,
         "warningThreshold": 10,
         "dangerThreshold": 20,
@@ -73,6 +91,7 @@ PHASE1_GASES = [
         "name": "氧气",
         "color": "#22c55e",
         "densityRatio": 1.11,
+        "molarMass": 32.00,
         "diffusionBias": 0.95,
         "warningThreshold": 19,
         "dangerThreshold": 23,
@@ -129,7 +148,8 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
     stability_class = str(payload.get("stabilityClass") or "D").upper()
     terrain_roughness = clamp(parse_float(payload.get("terrainRoughness"), 0.45), 0.05, 1.5)
     obstacle_influence_enabled = payload.get("obstacleInfluenceEnabled", True) is not False
-    frame_count = int(payload.get("frameCount") or 0)
+    # 钳制帧数到 [0, 600]，防止超大值耗尽资源（DoS）
+    frame_count = int(clamp(int(payload.get("frameCount") or 0), 0, 600))
     frame_step_sec = float(payload.get("frameStepSec") or 1)
     sensors = payload.get("sensors") or []
 
@@ -147,7 +167,7 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
     angle = wind_direction * math.pi / 180.0
     cos_theta = math.cos(angle)
     sin_theta = math.sin(angle)
-    stability_factor = STABILITY_FACTORS.get(stability_class, STABILITY_FACTORS["D"])
+    urban = resolve_environment(terrain_roughness)
     hard_blockers = build_hard_blockers(facilities)
     wake_obstacles = build_wake_obstacles(facilities)
     channel_segments = build_channel_segments(roads)
@@ -157,41 +177,81 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
     peak_affected_area = 0.0
     peak_danger_area = 0.0
 
+    # Physical plume parameters. ``sourceRate`` is interpreted as the gas
+    # emission rate Q in grams per second; ambient temperature/pressure set the
+    # mixing environment used for the kg/m3 -> ppm conversion.
+    ambient_temperature_k = ambient_temperature + 273.15
+    ambient_pressure_pa = initial_pressure * 1.0e5 if initial_pressure > 5.0 else max(initial_pressure, 0.5) * 1.013e5
+    params = PlumeParams(
+        emission_rate_g_s=max(source_rate, 0.0),
+        wind_speed_10m=max(wind_speed, 0.0),
+        release_height_m=max(release_height, 0.0),
+        release_duration_s=max(release_duration, 0.0),
+        stability_class=stability_class,
+        urban=urban,
+        molar_mass_g_mol=float(gas.get("molarMass", 28.97)),
+        temperature_k=ambient_temperature_k,
+        pressure_pa=ambient_pressure_pa,
+    )
+    emit_step_s = choose_emit_step(release_duration, frame_step_sec)
+    emission_times = build_emission_times(release_duration, emit_step_s)
+
+    # Pre-compute the grid geometry once: cell centres in pixels, and the
+    # corresponding along/cross-wind coordinates in metres relative to the
+    # source. ``along`` is positive in the direction the wind blows toward.
+    xs = np.arange(GRID_SIZE / 2, MAP_WIDTH, GRID_SIZE, dtype=float)
+    ys = np.arange(GRID_SIZE / 2, MAP_HEIGHT, GRID_SIZE, dtype=float)
+    grid_x, grid_y = np.meshgrid(xs, ys, indexing="xy")
+    dx = grid_x - float(source["x"])
+    dy = grid_y - float(source["y"])
+    along_m = (dx * cos_theta + dy * sin_theta) * MAP_METERS_PER_UNIT
+    cross_m = (-dx * sin_theta + dy * cos_theta) * MAP_METERS_PER_UNIT
+
+    # Humidity slightly enhances near-ground depletion for soluble gases; kept as
+    # a small, explicit multiplicative attenuation rather than a hidden factor.
+    humidity_retention = clamp(1.0 - humidity * 0.0008, 0.85, 1.0)
+
+    cell_area_m2 = GRID_SIZE * GRID_SIZE * MAP_METERS_PER_UNIT * MAP_METERS_PER_UNIT
+    warning_threshold = float(gas["warningThreshold"])
+    danger_threshold = float(gas["dangerThreshold"])
+    # Faint-but-visible floor for the diffuse halo (ppm).
+    visible_floor = max(warning_threshold * 0.02, 0.05)
+
     for frame_index in range(max(frame_count, 0)):
         time_sec = frame_index * frame_step_sec
-        release_factor = get_release_factor(time_sec, release_duration)
-        advection_distance = (wind_speed * time_sec) / MAP_METERS_PER_UNIT
-        pressure_factor = clamp(0.78 + initial_pressure * 0.42, 0.55, 1.75)
-        buoyancy_factor = clamp(1 + (initial_temperature - ambient_temperature) / 180.0, 0.75, 1.25)
-        humidity_decay = clamp(1 - humidity * 0.0016, 0.7, 1.05)
-        terrain_along_factor = clamp(0.92 + terrain_roughness * 0.22, 0.75, 1.3)
-        terrain_cross_factor = clamp(0.88 + terrain_roughness * 0.55, 0.7, 1.55)
-        height_spread_factor = clamp(1 + release_height / 14.0, 1.0, 2.1)
-        height_concentration_factor = clamp(1.02 - release_height * 0.018, 0.5, 1.05)
-        sigma_along = (28 + math.sqrt(time_sec + 1) * 11 * float(gas["diffusionBias"])) * terrain_along_factor
-        sigma_cross = (18 + math.sqrt(time_sec + 1) * 8.5 * stability_factor * float(gas["diffusionBias"])) * terrain_cross_factor * height_spread_factor
+
+        ppm_field = transient_ppm_field(
+            along_m,
+            cross_m,
+            time_sec,
+            params,
+            emission_times,
+            emit_step_s,
+            receptor_height_m=0.0,
+        )
+        ppm_field = ppm_field * humidity_retention
+
         cells: List[Dict] = []
         max_concentration = 0.0
         affected_area = 0.0
         warning_area = 0.0
         danger_area = 0.0
 
-        x = GRID_SIZE / 2
-        while x < MAP_WIDTH:
-            y = GRID_SIZE / 2
-            while y < MAP_HEIGHT:
-                dx = x - source["x"]
-                dy = y - source["y"]
-                along = dx * cos_theta + dy * sin_theta
-                cross = -dx * sin_theta + dy * cos_theta
-                if obstacle_influence_enabled and is_inside_hard_blocker(x, y, hard_blockers):
-                    y += GRID_SIZE
+        rows, columns = ppm_field.shape
+        for row in range(rows):
+            for column in range(columns):
+                base_ppm = float(ppm_field[row, column])
+                if base_ppm < visible_floor:
+                    continue
+                cell_x = float(grid_x[row, column])
+                cell_y = float(grid_y[row, column])
+                if obstacle_influence_enabled and is_inside_hard_blocker(cell_x, cell_y, hard_blockers):
                     continue
 
                 obstacle_effect = (
                     evaluate_obstacle_effects(
-                        x=x,
-                        y=y,
+                        x=cell_x,
+                        y=cell_y,
                         cos_theta=cos_theta,
                         sin_theta=sin_theta,
                         wake_obstacles=wake_obstacles,
@@ -200,73 +260,60 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
                     else {"obstacleFactor": 1.0, "shadowFactor": 1.0, "wakeOffset": 0.0}
                 )
                 channel_effect = evaluate_channel_effects(
-                    x=x,
-                    y=y,
+                    x=cell_x,
+                    y=cell_y,
                     wind_angle=angle,
                     channel_segments=channel_segments,
                 )
-                obstacle_factor = obstacle_effect["obstacleFactor"]
-                wake_offset = obstacle_effect["wakeOffset"]
-                shifted_cross = cross + wake_offset
-                effective_along = along - advection_distance
-                effective_sigma_along = sigma_along * channel_effect["alongScale"]
-                effective_sigma_cross = sigma_cross * channel_effect["crossScale"]
-                gaussian = math.exp(
-                    -((effective_along * effective_along) / (2 * effective_sigma_along * effective_sigma_along))
-                    -((shifted_cross * shifted_cross) / (2 * effective_sigma_cross * effective_sigma_cross))
-                )
-                downstream_bias = 1.0 if along > -80 else 0.55
-                # 标准高斯烟羽公式 (地面源):
-                #   C = Q / (π·u·σy·σz) × exp(-y²/(2σy²))
-                # σ 单位为网格单元(20px), 转换为实际距离: × GRID_SIZE × MAP_METERS_PER_UNIT
-                sigma_y_m = effective_sigma_cross * GRID_SIZE * MAP_METERS_PER_UNIT
-                sigma_z_m = effective_sigma_along * GRID_SIZE * MAP_METERS_PER_UNIT * 0.6
-                norm_factor = math.pi * max(wind_speed, 1.1) * sigma_y_m * sigma_z_m
+                # Empirical near-field wake / channel attenuation applied on top
+                # of the physically computed Gaussian-puff concentration. These
+                # factors capture obstacle sheltering and street-channelling that
+                # a flat-terrain Gaussian model cannot represent on its own.
                 concentration = max(
                     0.0,
-                    source_rate
-                    * float(gas["densityRatio"])
-                    * pressure_factor
-                    * buoyancy_factor
-                    * humidity_decay
-                    * height_concentration_factor
-                    * release_factor
-                    * downstream_bias
-                    * obstacle_factor
+                    base_ppm
+                    * obstacle_effect["obstacleFactor"]
                     * obstacle_effect["shadowFactor"]
-                    * channel_effect["channelFactor"]
-                    * gaussian
-                    / max(norm_factor, 0.01),
+                    * channel_effect["channelFactor"],
+                )
+                if concentration < visible_floor:
+                    continue
+
+                level = "low"
+                alpha = min(0.24, 0.05 + concentration / (danger_threshold * 8))
+                if concentration >= danger_threshold:
+                    level = "danger"
+                    alpha = min(0.56, 0.22 + concentration / (danger_threshold * 10))
+                    danger_area += cell_area_m2
+                elif concentration >= warning_threshold:
+                    level = "warning"
+                    alpha = min(0.42, 0.15 + concentration / (danger_threshold * 11))
+                    warning_area += cell_area_m2
+
+                affected_area += cell_area_m2
+                max_concentration = max(max_concentration, concentration)
+                cells.append(
+                    {
+                        "x": cell_x,
+                        "y": cell_y,
+                        "size": GRID_SIZE,
+                        "concentration": round(concentration, 4),
+                        "level": level,
+                        "alpha": alpha,
+                        "shadowFactor": round(obstacle_effect["shadowFactor"], 4),
+                        "channelFactor": round(channel_effect["channelFactor"], 4),
+                    }
                 )
 
-                if concentration >= 0.12:
-                    level = "low"
-                    alpha = min(0.24, 0.05 + concentration / (float(gas["dangerThreshold"]) * 8))
-                    if concentration >= float(gas["dangerThreshold"]):
-                        level = "danger"
-                        alpha = min(0.56, 0.22 + concentration / (float(gas["dangerThreshold"]) * 10))
-                        danger_area += GRID_SIZE * GRID_SIZE * MAP_METERS_PER_UNIT * MAP_METERS_PER_UNIT
-                    elif concentration >= float(gas["warningThreshold"]):
-                        level = "warning"
-                        alpha = min(0.42, 0.15 + concentration / (float(gas["dangerThreshold"]) * 11))
-                        warning_area += GRID_SIZE * GRID_SIZE * MAP_METERS_PER_UNIT * MAP_METERS_PER_UNIT
-
-                    affected_area += GRID_SIZE * GRID_SIZE * MAP_METERS_PER_UNIT * MAP_METERS_PER_UNIT
-                    max_concentration = max(max_concentration, concentration)
-                    cells.append(
-                        {
-                            "x": x,
-                            "y": y,
-                            "size": GRID_SIZE,
-                            "concentration": concentration,
-                            "level": level,
-                            "alpha": alpha,
-                            "shadowFactor": round(obstacle_effect["shadowFactor"], 4),
-                            "channelFactor": round(channel_effect["channelFactor"], 4),
-                        }
-                    )
-                y += GRID_SIZE
-            x += GRID_SIZE
+        # Plume visual envelope derived from the physical dispersion: the leading
+        # edge sits at the wind-advection distance, the half-widths from Briggs
+        # sigma at that distance (converted metres -> pixels, ~2 sigma envelope).
+        advection_distance_m = params.effective_wind * time_sec
+        advection_distance_px = advection_distance_m / MAP_METERS_PER_UNIT
+        sigma_y_lead = float(briggs_sigma_y(max(advection_distance_m, 1.0), stability_class, urban))
+        sigma_z_lead = float(briggs_sigma_z(max(advection_distance_m, 1.0), stability_class, urban))
+        major_axis_px = max(advection_distance_px * 0.5, sigma_y_lead / MAP_METERS_PER_UNIT * 2.0)
+        minor_axis_px = max(sigma_y_lead / MAP_METERS_PER_UNIT * 2.0, GRID_SIZE)
 
         frame_sensor_readings = build_frame_sensor_readings(sensors, cells, frame_index, time_sec)
         append_sensor_series(sensor_series, frame_sensor_readings)
@@ -286,9 +333,9 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
                     "sourceX": source["x"],
                     "sourceY": source["y"],
                     "angle": angle,
-                    "majorAxis": sigma_along * 4.2,
-                    "minorAxis": sigma_cross * 4.4,
-                    "driftDistance": advection_distance,
+                    "majorAxis": major_axis_px,
+                    "minorAxis": minor_axis_px,
+                    "driftDistance": advection_distance_px,
                 },
                 "sensorReadings": frame_sensor_readings,
             }
@@ -363,25 +410,6 @@ def normalize_source_point(source_map_point: Optional[Dict]) -> Optional[Dict]:
         "x": float(source_map_point.get("x", 0)),
         "y": float(source_map_point.get("y", 0)),
     }
-
-
-def get_release_factor(time_sec: float, release_duration: float) -> float:
-    """Compute the release factor for a given time.
-
-    During release: ramps up from 0.32 to 1.0. After release: exponential
-    decay based on remaining duration.
-
-    Args:
-        time_sec: Elapsed time in seconds.
-        release_duration: Total release duration in seconds.
-
-    Returns:
-        Release factor between 0.0 and 1.0.
-    """
-    if time_sec <= release_duration:
-        return 0.32 + 0.68 * min(1.0, time_sec / max(release_duration * 0.35, 1.0))
-    decay_time = time_sec - release_duration
-    return math.exp(-decay_time / max(release_duration * 0.8, 30.0))
 
 
 def get_facility_center(facility: Optional[Dict]) -> Dict:

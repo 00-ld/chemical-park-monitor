@@ -1,11 +1,10 @@
 package com.at.interceptor;
 
 import com.at.utils.JwtUtils;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.HandlerInterceptor;
-import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,37 +16,37 @@ public class TokenInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-//1. 获取请求的url
-        String url = request.getRequestURI();
-
-        //2. 判断请求url中是否包含login，如果包含，说明是登录操作，放行。
-        if (url.contains("login")) {
-            log.info("登录操作，放行...");
+        // 预检请求直接放行（CORS）
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
 
-        //3. 获取请求头中的令牌（token）。
+        // 登录/注册等白名单路径由 WebConfig.excludePathPatterns 精确放行，
+        // 这里不再用 url.contains 做子串匹配，避免 /api/sensor/login-xxx 之类绕过。
+
+        // 获取 token：仅从 Header 读取，不再支持查询参数回退（避免 token 出现在
+        // URL/日志/Referer 中泄露；项目无 WebSocket 端点在用）。
         String jwt = request.getHeader("token");
 
-        //4. 判断令牌是否存在，如果不存在，返回错误结果（未登录）。
-        if(jwt == null || jwt.isEmpty()) {
-            log.info("请求头token为空，返回未登录错误信息...");
+        if (jwt == null || jwt.isEmpty()) {
             response.setStatus(401);
-            return  false;
+            response.getWriter().write("{\"code\":401,\"message\":\"未登录\"}");
+            return false;
         }
 
-        //5. 解析token，如果解析失败，返回错误结果（未登录）。
         try {
-            JwtUtils.parseJWT(jwt);
+            Claims claims = JwtUtils.parseJWT(jwt);
+            // 解析成功后，将身份信息存入 request attribute，供后续鉴权拦截器使用
+            request.setAttribute("role", claims.get("role"));
+            request.setAttribute("userId", claims.get("id"));
+            request.setAttribute("username", claims.get("username"));
         } catch (Exception e) {
-            e.printStackTrace();
-            log.info("解析令牌失败，返回未登录错误信息...");
-            response.setStatus(HttpStatus.SC_UNAUTHORIZED);//401
-            return  false;
+            log.warn("令牌无效: {}", e.getMessage());
+            response.setStatus(401);
+            response.getWriter().write("{\"code\":401,\"message\":\"令牌无效\"}");
+            return false;
         }
 
-        //6. 放行。
-        log.info("令牌合法，放行...");
         return true;
     }
 }

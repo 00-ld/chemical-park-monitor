@@ -14,7 +14,6 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/sensor")
-@CrossOrigin
 public class SensorController {
 
     @Resource
@@ -28,7 +27,7 @@ public class SensorController {
             return ResponseEntity.ok(Result.success(list));
         } catch (Exception e) {
             log.error("查询传感器失败", e);
-            return ResponseEntity.internalServerError().body(Result.error("查询失败：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("查询失败"));
         }
     }
 
@@ -47,7 +46,7 @@ public class SensorController {
             }
         } catch (Exception e) {
             log.error("新增传感器异常", e);
-            return ResponseEntity.internalServerError().body(Result.error("系统异常：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("系统异常"));
         }
     }
 
@@ -66,7 +65,7 @@ public class SensorController {
             }
         } catch (Exception e) {
             log.error("更新传感器异常", e);
-            return ResponseEntity.internalServerError().body(Result.error("系统异常：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("系统异常"));
         }
     }
 
@@ -86,7 +85,7 @@ public class SensorController {
             }
         } catch (Exception e) {
             log.error("删除传感器异常", e);
-            return ResponseEntity.internalServerError().body(Result.error("系统异常：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("系统异常"));
         }
     }
 }

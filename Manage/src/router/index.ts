@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { constantRoute } from './routes'
+import { GET_TOKEN } from '@/utils/token'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -12,13 +13,15 @@ const router = createRouter({
 // 路由守卫：未登录时强制跳转登录页
 const whiteList = ['/login', '/register']
 router.beforeEach((to, _from, next) => {
-  const token = localStorage.getItem('token')
+  // 统一从 token 工具读取（key 'TOKEN'），与 store / 请求拦截器保持同一数据源
+  const token = GET_TOKEN()
   if (token) {
     next()
   } else if (whiteList.includes(to.path)) {
     next()
   } else {
-    next('/login')
+    // 记录目标地址，登录后可回跳
+    next({ path: '/login', query: { redirect: to.fullPath } })
   }
 })
 

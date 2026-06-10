@@ -3,8 +3,11 @@
 Provides observation loss, PDE residual loss, source regularization,
 and combined loss computation for refining candidate source locations.
 
-Uses the Gaussian plume model for physically-based signal prediction:
-    C(x,y) = Q / (pi * u * sigma_y * sigma_z) * exp(-y^2 / (2*sigma_y^2))
+Signal prediction is delegated to the physically consistent Gaussian-plume
+forward model (Briggs/Pasquill dispersion coefficients), so the inversion uses
+the *same* dispersion physics as the forward diffusion simulator instead of the
+old hand-tuned coefficients. The single-sensor helper :func:`gaussian_plume_predict`
+keeps its historical signature for backward compatibility.
 
 Typical usage:
     loss = compute_loss_snapshot(center, candidate, sensors, scenario)
@@ -15,14 +18,20 @@ from __future__ import annotations
 import math
 from typing import Dict, Sequence
 
+from diffusion.gaussian_plume import (
+    briggs_sigma_y,
+    briggs_sigma_z,
+    normalize_stability,
+)
+
 MAP_METERS_PER_UNIT = 0.5
 DEFAULT_EMISSION_RATE = 1.0
-# Widened dispersion coefficients for park-scale inversion (100-500m)
-# Standard PG-D: sigma_y=0.08*x/sqrt(u), sigma_z=0.06*x/sqrt(u)
-# At park scale these are too narrow; use 2.5x wider for robust matching
-SIGMA_Y_COEFF = 0.22
-SIGMA_Z_COEFF = 0.15
 MIN_WIND_SPEED = 0.5
+# Default dispersion regime for single-sensor prediction when the caller does
+# not supply stability / terrain. Neutral stability (D) over built-up terrain
+# matches the diffusion-side default (terrainRoughness 0.45 -> urban).
+DEFAULT_STABILITY = "D"
+DEFAULT_URBAN = True
 
 
 def gaussian_plume_predict(
@@ -33,11 +42,14 @@ def gaussian_plume_predict(
     wind_speed: float,
     wind_direction_deg: float,
     emission_rate: float = DEFAULT_EMISSION_RATE,
+    stability_class: str = DEFAULT_STABILITY,
+    urban: bool = DEFAULT_URBAN,
 ) -> float:
     """Predict concentration at a sensor location using the Gaussian plume model.
 
-    Uses ground-level point source formulation with Pasquill-Gifford
-    dispersion coefficients for stability class D.
+    Uses ground-level point source formulation with physically grounded
+    Briggs (1973) / Pasquill dispersion coefficients, consistent with the
+    forward diffusion simulator.
 
     Args:
         source_x: Source X coordinate in map pixels.
@@ -48,6 +60,8 @@ def gaussian_plume_predict(
         wind_direction_deg: Wind direction in degrees. In screen coordinates (y-down):
             0=east, 90=south. Used as transport direction in the plume model.
         emission_rate: Source emission rate Q (default 1.0 for normalized).
+        stability_class: Pasquill stability class 'A'..'F'.
+        urban: True for built-up (urban) dispersion coefficients.
 
     Returns:
         Predicted concentration value (0.0 if upwind or invalid).
@@ -65,10 +79,11 @@ def gaussian_plume_predict(
     along_m = along * MAP_METERS_PER_UNIT
     cross_m = cross * MAP_METERS_PER_UNIT
 
-    sigma_y = max(SIGMA_Y_COEFF * along_m / math.sqrt(u), 1.0)
-    sigma_z = max(SIGMA_Z_COEFF * along_m / math.sqrt(u), 1.0)
+    stab = normalize_stability(stability_class)
+    sigma_y = max(float(briggs_sigma_y(along_m, stab, urban)), 1e-3)
+    sigma_z = max(float(briggs_sigma_z(along_m, stab, urban)), 1e-3)
 
-    return emission_rate / (math.pi * u * sigma_y * sigma_z) * math.exp(-(cross_m ** 2) / (2 * sigma_y ** 2))
+    return emission_rate / (2.0 * math.pi * u * sigma_y * sigma_z) * math.exp(-(cross_m ** 2) / (2 * sigma_y ** 2))
 
 
 def fit_emission_rate(

@@ -247,7 +247,7 @@ function getCarDetail() {
 const handleWarning = async () => {
   try {
     // 1. 保存预警历史到数据库
-    await axios.post('http://localhost:8081/api/history/add', {
+    await axios.post((import.meta.env.VITE_APP_BASE_API || '/api') + '/history/add', {
       carId: Number(carId.value),
       gasType: config.value.type,
       gasValue: detailList.value[0]?.gas || 0 // 取当前浓度
