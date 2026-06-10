@@ -26,7 +26,7 @@ public class CarController {
             return ResponseEntity.ok(Result.success(carList));
         } catch (Exception e) {
             log.error("查询所有小车失败", e);
-            return ResponseEntity.internalServerError().body(Result.error("查询失败：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("查询失败"));
         }
     }
 

@@ -31,6 +31,7 @@ public class LoginServiceImpl implements LoginService {
         Map<String, Object> map = new HashMap<>();
         map.put("username", loginUser.getUsername());
         map.put("id", loginUser.getId());
+        map.put("role", loginUser.getRole());
         String token = JwtUtils.generateJwt(map);
         log.info("用户登录成功: {}", user.getUsername());
         return token;
@@ -45,6 +46,8 @@ public class LoginServiceImpl implements LoginService {
         }
         // 注册时 BCrypt 哈希密码
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+        // 强制新注册账号为普通用户，忽略客户端传入的 role，防止越权提权
+        user.setRole("user");
         loginMapper.insert(user);
         log.info("用户注册成功: {}", user.getUsername());
         return true;

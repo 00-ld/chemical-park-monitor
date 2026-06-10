@@ -28,7 +28,7 @@ public class SensorLayoutController {
             return ResponseEntity.ok(Result.success(list));
         } catch (Exception e) {
             log.error("查询布局方案失败", e);
-            return ResponseEntity.internalServerError().body(Result.error("查询失败：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("查询失败"));
         }
     }
 
@@ -44,7 +44,7 @@ public class SensorLayoutController {
             return ResponseEntity.ok(Result.success(result));
         } catch (Exception e) {
             log.error("查询布局方案失败", e);
-            return ResponseEntity.internalServerError().body(Result.error("查询失败：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("查询失败"));
         }
     }
 
@@ -77,7 +77,7 @@ public class SensorLayoutController {
             return ResponseEntity.ok(Result.success(Map.of("id", layoutId)));
         } catch (Exception e) {
             log.error("保存布局方案异常", e);
-            return ResponseEntity.internalServerError().body(Result.error("保存失败：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("保存失败"));
         }
     }
 
@@ -89,7 +89,7 @@ public class SensorLayoutController {
             return ResponseEntity.ok(Result.success("布局方案已删除"));
         } catch (Exception e) {
             log.error("删除布局方案异常", e);
-            return ResponseEntity.internalServerError().body(Result.error("删除失败：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("删除失败"));
         }
     }
 }

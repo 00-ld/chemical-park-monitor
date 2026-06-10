@@ -56,7 +56,7 @@ public class WarningHistoryController {
             }
         } catch (Exception e) {
             log.error("保存预警记录异常", e);
-            return ResponseEntity.internalServerError().body(Result.error("系统异常：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("系统异常"));
         }
     }
 
@@ -68,7 +68,7 @@ public class WarningHistoryController {
             return ResponseEntity.ok(Result.success(list));
         } catch (Exception e) {
             log.error("查询历史记录失败", e);
-            return ResponseEntity.internalServerError().body(Result.error("查询失败：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("查询失败"));
         }
     }
 
@@ -89,7 +89,7 @@ public class WarningHistoryController {
             }
         } catch (Exception e) {
             log.error("删除历史记录异常", e);
-            return ResponseEntity.internalServerError().body(Result.error("删除异常：" + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Result.error("删除异常"));
         }
     }
 }

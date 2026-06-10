@@ -14,7 +14,7 @@ public interface LoginMapper {
     @Select("SELECT * FROM user WHERE username = #{username}")
     User getByUsername(String username);
 
-    // 插入用户（注册用，密码已哈希）
-    @Insert("INSERT INTO user(username, password, create_time) VALUES(#{username}, #{password}, NOW())")
+    // 插入用户（注册用，密码已哈希，role 由服务端强制赋值）
+    @Insert("INSERT INTO user(username, password, role, create_time) VALUES(#{username}, #{password}, #{role}, NOW())")
     int insert(User user);
 }

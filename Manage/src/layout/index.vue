@@ -81,6 +81,7 @@ import { ElAvatar } from 'element-plus'
 import Main from './main/index.vue'
 import Logo from './logo/index.vue'
 import Tabbar from './tabbar/index.vue'
+import useUserStore from '@/store/modules/user'
 
 defineOptions({
   name: 'Layout',
@@ -89,6 +90,7 @@ defineOptions({
 // 获取路由实例
 const $router = useRouter()
 const $route = useRoute()
+const userStore = useUserStore()
 
 // 模拟布局仓库（如果项目中有真实的Pinia/Vuex仓库，替换此处）
 const LayOutSettingStore = {
@@ -103,7 +105,8 @@ const handleMenuSelect = (index: string) => {
   if (index === $route.path) return
 
   if (index === 'logout') {
-    localStorage.removeItem('token')
+    // 走 store 的 logout：清除内存与本地存储(TOKEN)
+    userStore.logout()
     $router
       .push('/login')
       .catch((err) => console.warn('退出登录跳转失败:', err))

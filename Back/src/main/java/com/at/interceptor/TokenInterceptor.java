@@ -1,11 +1,10 @@
 package com.at.interceptor;
 
 import com.at.utils.JwtUtils;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.HandlerInterceptor;
-import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,18 +16,17 @@ public class TokenInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        String url = request.getRequestURI();
-
-        // 登录/注册接口放行
-        if (url.contains("login") || url.contains("register")) {
+        // 预检请求直接放行（CORS）
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
 
-        // 获取 token：优先从 Header，其次从 WebSocket 查询参数
+        // 登录/注册等白名单路径由 WebConfig.excludePathPatterns 精确放行，
+        // 这里不再用 url.contains 做子串匹配，避免 /api/sensor/login-xxx 之类绕过。
+
+        // 获取 token：仅从 Header 读取，不再支持查询参数回退（避免 token 出现在
+        // URL/日志/Referer 中泄露；项目无 WebSocket 端点在用）。
         String jwt = request.getHeader("token");
-        if (jwt == null || jwt.isEmpty()) {
-            jwt = request.getParameter("token");
-        }
 
         if (jwt == null || jwt.isEmpty()) {
             response.setStatus(401);
@@ -37,7 +35,11 @@ public class TokenInterceptor implements HandlerInterceptor {
         }
 
         try {
-            JwtUtils.parseJWT(jwt);
+            Claims claims = JwtUtils.parseJWT(jwt);
+            // 解析成功后，将身份信息存入 request attribute，供后续鉴权拦截器使用
+            request.setAttribute("role", claims.get("role"));
+            request.setAttribute("userId", claims.get("id"));
+            request.setAttribute("username", claims.get("username"));
         } catch (Exception e) {
             log.warn("令牌无效: {}", e.getMessage());
             response.setStatus(401);

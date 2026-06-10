@@ -88,7 +88,9 @@ import { User, Lock } from '@element-plus/icons-vue';
 import { reactive, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElNotification } from 'element-plus';
-import { reqLogin } from '@/api/user';
+import useUserStore from '@/store/modules/user';
+
+const userStore = useUserStore();
 
 const getTime = () => {
   const hour = new Date().getHours();
@@ -159,22 +161,17 @@ const login = async () => {
   loading.value = true;
 
   try {
-    const res = await reqLogin(loginForm);
-
-    if (res.code === 200) {
-      localStorage.setItem('token', res.data);
-      ElNotification({
-        type: 'success',
-        message: '登录成功，正在进入系统...',
-        title: `HI, ${getTime()}好`,
-      });
-      const redirect = $route.query.redirect as string | undefined;
-      $router.push({ path: redirect || '/home' });
-    } else {
-      ElNotification.error(res.error || res.message || '登录失败');
-    }
-  } catch (error) {
-    ElNotification.error('登录请求失败');
+    // 走 store 的 userLogin：内部会写入内存与本地存储(TOKEN)，保持单一数据源
+    await userStore.userLogin(loginForm);
+    ElNotification({
+      type: 'success',
+      message: '登录成功，正在进入系统...',
+      title: `HI, ${getTime()}好`,
+    });
+    const redirect = $route.query.redirect as string | undefined;
+    $router.push({ path: redirect || '/home' });
+  } catch (error: any) {
+    ElNotification.error(error?.message || '登录失败');
   } finally {
     loading.value = false;
   }

@@ -55,3 +55,9 @@ Back/src/main/resources/application-local.properties
 *.pt
 *.pth
 yolo11m.pt
+
+# Generated datasets (large binary)
+*.npy
+
+# Third-party reference docs (large, not source)
+化工园区设备文献/

@@ -16,6 +16,7 @@ from typing import Dict, List
 
 from .pinn_dataset import normalize_coarse_search_payload, pick_arrival_frame
 from .pinn_losses import fit_emission_rate, gaussian_plume_predict
+from diffusion.gaussian_plume import normalize_stability, resolve_environment
 
 MAP_METERS_PER_UNIT = 0.5
 ORIGIN_LONGITUDE = 118.78
@@ -45,6 +46,9 @@ def run_coarse_search(payload: Dict) -> Dict:
     scenario = dataset.get("scenario") or {}
     wind_speed = float(scenario.get("windSpeed") or 1.0)
     wind_direction = float(scenario.get("windDirection") or 0)
+    # Dispersion regime, shared with the EKI refine stage for self-consistency.
+    stability_class = normalize_stability(scenario.get("stabilityClass") or "D")
+    urban = resolve_environment(float(scenario.get("terrainRoughness") or 0.45))
 
     sensors = build_active_sensors(
         sensors=dataset.get("sensors") or [],
@@ -59,7 +63,7 @@ def run_coarse_search(payload: Dict) -> Dict:
                 "activeSensorCount": 0,
                 "currentFrameIndex": int(dataset.get("currentFrameIndex") or 0),
                 "frameTimeSec": dataset.get("frameTimeSec") or 0,
-                "gridStep": config["gridStep"],
+                "gridStep": config.get("gridStep", 20),
                 "topK": config["topK"],
                 "candidateRadius": config["candidateRadius"],
                 "minObservationThreshold": config["minObservationThreshold"],
@@ -67,7 +71,8 @@ def run_coarse_search(payload: Dict) -> Dict:
         }
 
     candidates = []
-    grid_step = int(config["gridStep"])
+    # 钳制网格步长到 [5, 100]，并兜底缺失/<=0（gridStep=0 会触发 range ValueError，DoS）
+    grid_step = min(max(int(config.get("gridStep", 20) or 20), 5), 100)
     support_radius = float(config.get("supportRadius") or 140)
     max_observed = max(s["observedSignal"] for s in sensors) or 1.0
 
@@ -83,6 +88,7 @@ def run_coarse_search(payload: Dict) -> Dict:
                     x, y,
                     sensor["x"], sensor["y"],
                     wind_speed, wind_direction,
+                    stability_class=stability_class, urban=urban,
                 )
                 raw_predictions.append(pred)
             max_predicted = max(raw_predictions) or 1.0
@@ -185,7 +191,7 @@ def run_coarse_search(payload: Dict) -> Dict:
             "activeSensorCount": len(sensors),
             "currentFrameIndex": int(dataset.get("currentFrameIndex") or 0),
             "frameTimeSec": dataset.get("frameTimeSec") or 0,
-            "gridStep": config["gridStep"],
+            "gridStep": config.get("gridStep", 20),
             "topK": config["topK"],
             "candidateRadius": config["candidateRadius"],
             "minObservationThreshold": config["minObservationThreshold"],

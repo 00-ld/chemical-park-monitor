@@ -1324,7 +1324,8 @@ def simulate_time_series(data: Dict[str, Any]) -> Dict[str, Any]:
     try:
         system = IntegratedEscapeSystem()
         config, selected_gas, _ = _parse_config(data)
-        num_steps = int(data.get("numSteps", 30))
+        # 钳制步数到 [1, 500]，防止超大值耗尽资源（DoS）
+        num_steps = min(max(int(data.get("numSteps", 30)), 1), 500)
         step_interval = float(data.get("stepInterval", 5.0))
         raw_start = data.get("startPoint", (210, 300))
         raw_leak = data.get("leakPoint", (350, 240))

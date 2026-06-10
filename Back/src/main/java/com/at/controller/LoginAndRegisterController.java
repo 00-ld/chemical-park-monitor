@@ -22,10 +22,34 @@ public class LoginAndRegisterController {
 
     // 简易限流：IP → {次数, 窗口起始时间}
     private final ConcurrentHashMap<String, int[]> registerAttempts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, int[]> loginAttempts = new ConcurrentHashMap<>();
     private static final int MAX_REGISTER_PER_MINUTE = 5;
+    private static final int MAX_LOGIN_PER_MINUTE = 10;
+
+    /**
+     * 固定窗口限流：同一 key 在 1 分钟窗口内累加次数，超过 limit 返回 true（已超限）。
+     */
+    private boolean isRateLimited(ConcurrentHashMap<String, int[]> attempts, String key, int limit) {
+        long now = System.currentTimeMillis();
+        int[] record = attempts.compute(key, (k, v) -> {
+            if (v == null || now - v[1] > 60_000) {
+                return new int[]{1, (int) now};
+            }
+            v[0]++;
+            return v;
+        });
+        return record[0] > limit;
+    }
 
     @PostMapping("/login")
-    public ResponseEntity<Result> login(@Valid @RequestBody User user) {
+    public ResponseEntity<Result> login(@Valid @RequestBody User user, HttpServletRequest request) {
+        // 限流：同一 IP 每分钟最多登录尝试 10 次，防止暴力破解
+        String ip = request.getRemoteAddr();
+        if (isRateLimited(loginAttempts, ip, MAX_LOGIN_PER_MINUTE)) {
+            log.warn("登录频率过高，IP: {}", ip);
+            return ResponseEntity.status(429).body(Result.error("登录过于频繁，请稍后再试"));
+        }
+
         String token = loginService.login(user);
         if (token != null) {
             log.info("用户登录成功: {}", user.getUsername());
@@ -39,15 +63,7 @@ public class LoginAndRegisterController {
     public ResponseEntity<Result> register(@Valid @RequestBody User user, HttpServletRequest request) {
         // 限流：每个 IP 每分钟最多注册 5 次
         String ip = request.getRemoteAddr();
-        long now = System.currentTimeMillis();
-        int[] record = registerAttempts.compute(ip, (k, v) -> {
-            if (v == null || now - v[1] > 60_000) {
-                return new int[]{1, (int)(now)};
-            }
-            v[0]++;
-            return v;
-        });
-        if (record[0] > MAX_REGISTER_PER_MINUTE) {
+        if (isRateLimited(registerAttempts, ip, MAX_REGISTER_PER_MINUTE)) {
             log.warn("注册频率过高，IP: {}", ip);
             return ResponseEntity.status(429).body(Result.error("注册过于频繁，请稍后再试"));
         }

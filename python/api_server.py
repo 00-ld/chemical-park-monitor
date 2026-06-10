@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import os
 import sys
+import logging
 from typing import Any, Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
@@ -28,16 +29,54 @@ from gasDiffusionAstar import (
 from engine.task_router import route_task
 from response_utils import success_response, error_response
 
+logger = logging.getLogger("chemical-algorithm")
+
 app = FastAPI(title="Chemical Park Gas Detection and Tracing - Algorithm Service", version="3.0.0")
+
+# CORS：从环境变量读取允许来源，默认仅本地开发端口；不再使用通配 "*"。
+# 多个来源用逗号分隔，例如 ALGORITHM_CORS_ORIGINS="https://example.com,https://admin.example.com"
+_cors_origins = os.getenv(
+    "ALGORITHM_CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:3000,http://localhost:8081",
+)
+allowed_origins = [o.strip() for o in _cors_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+
+# ========== 共享密钥鉴权 ==========
+# 算法服务仅供 Java 后端 / 经 nginx 注入密钥的前端调用，不应公网裸奔。
+# 通过环境变量 ALGORITHM_API_KEY 配置；未配置时为兼容本地开发放行，但会告警。
+_API_KEY = os.getenv("ALGORITHM_API_KEY")
+# 鉴权强制开关：生产部署设为 true，漏配密钥时显式拒绝服务而非静默裸奔放行。
+_REQUIRE_AUTH = os.getenv("ALGORITHM_REQUIRE_AUTH", "false").lower() in ("1", "true", "yes")
+
+
+async def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    """校验请求头 X-API-Key。
+
+    Args:
+        x_api_key: 调用方在 X-API-Key 头中携带的密钥。
+
+    Raises:
+        HTTPException: 密钥缺失或不匹配时返回 401；强制鉴权但未配置密钥时返回 503。
+    """
+    if _API_KEY is None:
+        if _REQUIRE_AUTH:
+            # 生产环境强制鉴权但未配置密钥：显式拒绝服务，避免无鉴权裸奔
+            raise HTTPException(status_code=503, detail="算法服务未配置密钥，拒绝服务")
+        # 未配置密钥：本地开发模式放行，但记录告警提醒生产环境务必配置
+        logger.warning("ALGORITHM_API_KEY 未设置，算法服务当前无鉴权（仅可用于本地开发）")
+        return
+    if x_api_key != _API_KEY:
+        raise HTTPException(status_code=401, detail="无效的算法服务密钥")
 
 
 # ========== Global Exception Handler ==========
@@ -55,17 +94,19 @@ async def global_exception_handler(request: Request, exc: Exception) -> Dict[str
         exc: The unhandled exception.
 
     Returns:
-        Error response dict with traceback.
+        Error response dict with a generic message (no internal details).
     """
     if isinstance(exc, (HTTPException, StarletteHTTPException)):
         raise exc
-    return error_response(str(exc))
+    # 仅在服务端日志记录完整堆栈，对外只返回通用提示，避免泄露内部信息
+    logger.exception("未处理的算法服务异常: %s %s", request.method, request.url.path)
+    return error_response("算法服务内部错误")
 
 
 # ========== 1. Gas Diffusion + Path Planning ==========
 
 
-@app.post("/api/gas-path")
+@app.post("/api/gas-path", dependencies=[Depends(require_api_key)])
 async def gas_path(data: Dict[str, Any]) -> Dict[str, Any]:
     """Calculate gas diffusion and escape path.
 
@@ -81,11 +122,12 @@ async def gas_path(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     try:
         return success_response(calculate_gas_and_path(data))
-    except Exception as e:
-        return error_response(str(e))
+    except Exception:
+        logger.exception("gas_path 计算失败")
+        return error_response("气体扩散与路径计算失败")
 
 
-@app.get("/api/gas-types")
+@app.get("/api/gas-types", dependencies=[Depends(require_api_key)])
 async def gas_types() -> Dict[str, Any]:
     """Get information about all supported gas types.
 
@@ -95,11 +137,12 @@ async def gas_types() -> Dict[str, Any]:
     """
     try:
         return success_response(get_gas_types_info())
-    except Exception as e:
-        return error_response(str(e))
+    except Exception:
+        logger.exception("gas_types 查询失败")
+        return error_response("气体类型查询失败")
 
 
-@app.post("/api/time-series")
+@app.post("/api/time-series", dependencies=[Depends(require_api_key)])
 async def time_series_simulation(data: Dict[str, Any]) -> Dict[str, Any]:
     """Run a time-series diffusion simulation.
 
@@ -115,14 +158,15 @@ async def time_series_simulation(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     try:
         return success_response(simulate_time_series(data))
-    except Exception as e:
-        return error_response(str(e))
+    except Exception:
+        logger.exception("time_series_simulation 失败")
+        return error_response("时序扩散模拟失败")
 
 
 # ========== 2. Algorithm Engine (Pyodide Compatible Task Routing) ==========
 
 
-@app.post("/api/engine/run")
+@app.post("/api/engine/run", dependencies=[Depends(require_api_key)])
 async def run_engine_task(data: Dict[str, Any]) -> Dict[str, Any]:
     """Unified algorithm engine entrypoint compatible with Pyodide worker tasks.
 
@@ -139,14 +183,15 @@ async def run_engine_task(data: Dict[str, Any]) -> Dict[str, Any]:
     try:
         result = route_task(task_type, payload)
         return success_response(result)
-    except Exception as e:
-        return error_response(str(e))
+    except Exception:
+        logger.exception("run_engine_task 失败, task_type=%s", task_type)
+        return error_response("算法引擎执行失败")
 
 
 # ========== 3. Convenience Shortcuts ==========
 
 
-@app.post("/api/diffusion/simulate")
+@app.post("/api/diffusion/simulate", dependencies=[Depends(require_api_key)])
 async def diffusion_simulate(data: Dict[str, Any]) -> Dict[str, Any]:
     """Quick-access endpoint for diffusion simulation.
 
@@ -161,7 +206,7 @@ async def diffusion_simulate(data: Dict[str, Any]) -> Dict[str, Any]:
     return await run_engine_task({"task_type": "run_diffusion_simulation", "payload": data})
 
 
-@app.post("/api/inversion/coarse-search")
+@app.post("/api/inversion/coarse-search", dependencies=[Depends(require_api_key)])
 async def pinn_coarse_search(data: Dict[str, Any]) -> Dict[str, Any]:
     """Quick-access endpoint for PINN coarse source search.
 
@@ -176,7 +221,7 @@ async def pinn_coarse_search(data: Dict[str, Any]) -> Dict[str, Any]:
     return await run_engine_task({"task_type": "run_pinn_coarse_search", "payload": data})
 
 
-@app.post("/api/inversion/solve")
+@app.post("/api/inversion/solve", dependencies=[Depends(require_api_key)])
 async def pinn_inversion(data: Dict[str, Any]) -> Dict[str, Any]:
     """Quick-access endpoint for PINN source inversion.
 
@@ -191,7 +236,7 @@ async def pinn_inversion(data: Dict[str, Any]) -> Dict[str, Any]:
     return await run_engine_task({"task_type": "run_pinn_inversion", "payload": data})
 
 
-@app.post("/api/planning/evacuation")
+@app.post("/api/planning/evacuation", dependencies=[Depends(require_api_key)])
 async def evacuation_planning(data: Dict[str, Any]) -> Dict[str, Any]:
     """Quick-access endpoint for evacuation planning.
 

@@ -5,8 +5,13 @@ services:
     container_name: chemical-nginx
     ports:
       - "80:80"
+    environment:
+      # 仅替换 ALGORITHM_API_KEY，避免 envsubst 破坏 nginx 自身的 $host/$remote_addr 等变量
+      - ALGORITHM_API_KEY=${ALGORITHM_API_KEY}
+      - NGINX_ENVSUBST_FILTER=ALGORITHM_API_KEY
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      # 以模板方式挂载，容器启动时 envsubst 注入密钥后生成最终配置
+      - ./nginx/default.conf:/etc/nginx/templates/default.conf.template:ro
       - ../Manage/dist:/usr/share/nginx/html:ro
     depends_on:
       - backend
@@ -24,6 +29,8 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/chemical?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - ALGORITHM_API_KEY=${ALGORITHM_API_KEY}
     command: java -jar app.jar
     depends_on:
       mysql:
@@ -36,6 +43,9 @@ services:
       context: ../chemical-park-monitor/python
       dockerfile: ../../deploy/algorithm/Dockerfile
     container_name: chemical-algorithm
+    environment:
+      - ALGORITHM_API_KEY=${ALGORITHM_API_KEY}
+      - ALGORITHM_CORS_ORIGINS=${ALGORITHM_CORS_ORIGINS:-http://localhost}
     ports:
       - "127.0.0.1:8000:8000"
     restart: always

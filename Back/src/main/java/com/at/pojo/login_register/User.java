@@ -13,6 +13,9 @@ public class User {
     @NotBlank(message = "密码不能为空")
     private String password;
 
+    // 角色: admin=管理员可写, user=普通用户只读；注册时由服务端强制赋值，不信任客户端
+    private String role;
+
     public Long getId() {
         return id;
     }
@@ -35,5 +38,13 @@ public class User {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 }

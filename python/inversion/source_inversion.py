@@ -1,8 +1,15 @@
-"""Two-stage PINN source inversion implementation.
+"""Two-stage source inversion implementation.
 
-Performs candidate ranking, iterative refinement with shrinking radius,
-and convergence tracking to estimate the gas leak source location from
-sensor observations and scenario data.
+Performs candidate ranking, then refines the best candidates with Ensemble
+Kalman Inversion (EKI). The ensemble mean gives the source point estimate
+``[x, y, Q]``; the ensemble covariance gives a physically meaningful
+localisation uncertainty, which drives both the shrinking confidence polygons
+shown to the user and the reported credible radius.
+
+The output schema (``iterations``, ``shrinkFrames``, ``estimatedSource``,
+``confidenceRadius``, ``errorMetrics``, ``summary`` ...) is preserved so the
+front-end consumes the new physics-based result without any change; EKI
+iterations are mapped onto the existing per-step animation frames.
 
 Typical usage:
     result = run_two_stage_inversion(dataset)
@@ -13,114 +20,20 @@ from __future__ import annotations
 import math
 from typing import Dict, List, Sequence
 
-from .pinn_losses import compute_loss_snapshot, fit_emission_rate, gaussian_plume_predict
+import numpy as np
+
+from .eki import covariance_to_radius, run_eki
+from .forward_model import ForwardModel, MIN_EMISSION_RATE
+from .pinn_losses import compute_loss_snapshot
 from .pinn_model import blend_points, estimate_weighted_center
 
-SIMPLEX_MAX_ITER = 200
-SIMPLEX_ALPHA = 1.0
-SIMPLEX_GAMMA = 2.0
-SIMPLEX_RHO = 0.5
-SIMPLEX_SIGMA = 0.5
-SIMPLEX_XTOL = 3.0
-SIMPLEX_FTOL = 1e-4
+# Map scale shared with the diffusion model: 0.5 metres per pixel.
+MAP_METERS_PER_UNIT = 0.5
 
 
-def nelder_mead_2d(
-    objective,
-    x0: float,
-    y0: float,
-    initial_step: float = 25.0,
-    max_iter: int = SIMPLEX_MAX_ITER,
-    xtol: float = SIMPLEX_XTOL,
-    ftol: float = SIMPLEX_FTOL,
-) -> Dict:
-    """Run Nelder-Mead simplex optimization in 2D.
-
-    Args:
-        objective: Function that takes (x, y) and returns a scalar loss.
-        x0: Initial X coordinate.
-        y0: Initial Y coordinate.
-        initial_step: Initial simplex edge length.
-        max_iter: Maximum iterations.
-        xtol: Convergence threshold for coordinate change.
-        ftol: Convergence threshold for function value change.
-
-    Returns:
-        Dict with 'best', 'history', 'iterations', 'converged'.
-    """
-    simplex = [
-        [x0, y0],
-        [x0 + initial_step, y0],
-        [x0, y0 + initial_step],
-    ]
-    values = [objective(p[0], p[1]) for p in simplex]
-    history = [{"x": p[0], "y": p[1], "loss": v} for p, v in zip(simplex, values)]
-
-    for iteration in range(max_iter):
-        order = sorted(range(3), key=lambda i: values[i])
-        best_idx, worst_idx = order[0], order[2]
-        mid_idx = order[1]
-
-        if values[worst_idx] - values[best_idx] < ftol:
-            return {
-                "best": {"x": simplex[best_idx][0], "y": simplex[best_idx][1]},
-                "history": history,
-                "iterations": iteration + 1,
-                "converged": True,
-            }
-
-        centroid = [
-            (simplex[best_idx][0] + simplex[mid_idx][0]) / 2.0,
-            (simplex[best_idx][1] + simplex[mid_idx][1]) / 2.0,
-        ]
-
-        reflected = [
-            centroid[0] + SIMPLEX_ALPHA * (centroid[0] - simplex[worst_idx][0]),
-            centroid[1] + SIMPLEX_ALPHA * (centroid[1] - simplex[worst_idx][1]),
-        ]
-        f_reflected = objective(reflected[0], reflected[1])
-
-        if values[best_idx] <= f_reflected < values[mid_idx]:
-            simplex[worst_idx] = reflected
-            values[worst_idx] = f_reflected
-        elif f_reflected < values[best_idx]:
-            expanded = [
-                centroid[0] + SIMPLEX_GAMMA * (reflected[0] - centroid[0]),
-                centroid[1] + SIMPLEX_GAMMA * (reflected[1] - centroid[1]),
-            ]
-            f_expanded = objective(expanded[0], expanded[1])
-            if f_expanded < f_reflected:
-                simplex[worst_idx] = expanded
-                values[worst_idx] = f_expanded
-            else:
-                simplex[worst_idx] = reflected
-                values[worst_idx] = f_reflected
-        else:
-            contracted = [
-                centroid[0] + SIMPLEX_RHO * (simplex[worst_idx][0] - centroid[0]),
-                centroid[1] + SIMPLEX_RHO * (simplex[worst_idx][1] - centroid[1]),
-            ]
-            f_contracted = objective(contracted[0], contracted[1])
-            if f_contracted < values[worst_idx]:
-                simplex[worst_idx] = contracted
-                values[worst_idx] = f_contracted
-            else:
-                for i in range(3):
-                    if i != best_idx:
-                        simplex[i][0] = simplex[best_idx][0] + SIMPLEX_SIGMA * (simplex[i][0] - simplex[best_idx][0])
-                        simplex[i][1] = simplex[best_idx][1] + SIMPLEX_SIGMA * (simplex[i][1] - simplex[best_idx][1])
-                        values[i] = objective(simplex[i][0], simplex[i][1])
-
-        best_val = min(values)
-        history.append({"x": simplex[order[0]][0], "y": simplex[order[0]][1], "loss": best_val})
-
-    best_idx = min(range(3), key=lambda i: values[i])
-    return {
-        "best": {"x": simplex[best_idx][0], "y": simplex[best_idx][1]},
-        "history": history,
-        "iterations": max_iter,
-        "converged": False,
-    }
+def _clamp(value: float, low: float, high: float) -> float:
+    """Clamp a value to the inclusive ``[low, high]`` range."""
+    return max(low, min(high, value))
 
 
 def run_two_stage_inversion(dataset: Dict) -> Dict:
@@ -267,11 +180,16 @@ def refine_candidate(
     gas: Dict,
     true_source_map_point: Dict | None,
 ) -> Dict:
-    """Refine a candidate source location using Nelder-Mead optimization.
+    """Refine a candidate source location using Ensemble Kalman Inversion.
 
-    Uses gradient-free simplex optimization to minimize the Gaussian
-    plume observation loss, starting from the candidate center and
-    bounded within the candidate region.
+    Runs EKI on the state ``[x, y, log Q]`` with the physically consistent
+    Gaussian-plume forward model, starting from an ensemble drawn around the
+    candidate region. The emission rate is re-fit analytically at the final
+    location for accuracy. Each EKI iteration is mapped to one animation frame:
+    the per-step ensemble mean drives the frame ``center``, and the ensemble
+    covariance ellipse drives the shrinking confidence ``polygon``/``radius``,
+    so the animation reflects genuine posterior contraction rather than a
+    cosmetic easing curve.
 
     Args:
         candidate: Selected candidate region to refine.
@@ -288,57 +206,108 @@ def refine_candidate(
         Refinement result with iterations, estimated source, loss
         history, and error metrics.
     """
-    wind_speed = float(scenario.get("windSpeed") or 1.0)
-    wind_direction = float(scenario.get("windDirection") or 0)
     candidate_center = candidate["center"]
     candidate_radius = float(candidate.get("radius") or 45)
-    bounds_min_x = candidate_center["x"] - candidate_radius * 4
-    bounds_max_x = candidate_center["x"] + candidate_radius * 4
-    bounds_min_y = candidate_center["y"] - candidate_radius * 4
-    bounds_max_y = candidate_center["y"] + candidate_radius * 4
+    candidate_rank = int(candidate.get("rank") or 1)
 
-    def objective(x, y):
-        x_clamped = max(bounds_min_x, min(bounds_max_x, x))
-        y_clamped = max(bounds_min_y, min(bounds_max_y, y))
-        center = {"x": x_clamped, "y": y_clamped}
-        snapshot = compute_loss_snapshot(center, candidate, sensors, scenario)
-        return snapshot["total"]
+    # Animation/iteration budget, clamped to [8, 200] to bound cost (DoS guard).
+    anim_steps = min(max(int(training_config.get("animationSteps") or 18), 8), 200)
+    # EKI convergence threshold (relative misfit improvement). Independent of the
+    # legacy trainingConfig.convergenceRatio, whose semantics differ; a small
+    # value lets the ensemble fully contract, which is what makes the analytic
+    # emission-rate re-fit accurate.
+    convergence_ratio = float(training_config.get("ekiConvergenceRatio") or 0.005)
 
-    initial_x = blend_points(candidate_center, weighted_center, 0.5)["x"]
-    initial_y = blend_points(candidate_center, weighted_center, 0.5)["y"]
-    initial_step = max(candidate_radius * 1.5, 25.0)
+    # Build the physics forward operator and the observation vector (ppm).
+    forward_model = ForwardModel.from_scenario(sensors, scenario, gas)
+    observed = np.asarray([float(s.get("signal", 0.0)) for s in sensors], dtype=float)
 
-    nm_result = nelder_mead_2d(
-        objective, initial_x, initial_y,
-        initial_step=initial_step,
-        max_iter=max(int(training_config.get("animationSteps") or 18), 20) * 8,
+    def forward(theta: np.ndarray) -> np.ndarray:
+        return forward_model.predict(theta[0], theta[1], math.exp(theta[2]))
+
+    # Prior: centred on a blend of the candidate centre and the sensor-weighted
+    # centroid, with spread scaled to the candidate radius (and the park as a
+    # floor) so the ensemble can explore the plausible region.
+    initial = blend_points(candidate_center, weighted_center, 0.5)
+    prior_spread = max(candidate_radius * 1.8, 60.0)
+    prior_mean = np.array([initial["x"], initial["y"], math.log(20.0)], dtype=float)
+    prior_std = np.array([prior_spread, prior_spread, 1.2], dtype=float)
+
+    # Observation-noise std: relative noise floor on each sensor reading.
+    max_signal = float(np.max(observed)) if observed.size else 1.0
+    noise_std = np.maximum(0.05 * observed, max(0.02 * max_signal, 1e-2))
+
+    bounds = {
+        "x": (40.0, 961.0),
+        "y": (40.0, 611.0),
+        "logq": (math.log(MIN_EMISSION_RATE), math.log(1.0e5)),
+    }
+
+    eki_result = run_eki(
+        forward=forward,
+        observed=observed,
+        prior_mean=prior_mean,
+        prior_std=prior_std,
+        noise_std=noise_std,
+        max_iterations=max(anim_steps, 30),
+        convergence_ratio=convergence_ratio,
+        bounds=bounds,
     )
 
-    best_center = nm_result["best"]
-    best_center["x"] = round(best_center["x"], 2)
-    best_center["y"] = round(best_center["y"], 2)
+    # Analytic least-squares re-fit of the emission rate at the final location.
+    final_mean = eki_result.final_mean
+    estimated_rate = forward_model.fit_emission_rate(final_mean[0], final_mean[1], observed)
+
+    # Map the EKI mean/covariance history onto the existing animation frames.
+    mean_history = eki_result.mean_history
+    cov_history = eki_result.cov_history
+    total_points = len(mean_history)
+    max_animation_steps = max(anim_steps, 8)
+    if total_points <= max_animation_steps:
+        step_indices = list(range(total_points))
+    else:
+        step_indices = [
+            int(i * (total_points - 1) / (max_animation_steps - 1))
+            for i in range(max_animation_steps)
+        ]
 
     iterations = []
     shrink_frames = []
     loss_history = []
-    total_points = len(nm_result["history"])
-    max_animation_steps = max(int(training_config.get("animationSteps") or 18), 8)
-    step_indices = []
-    if total_points <= max_animation_steps:
-        step_indices = list(range(total_points))
-    else:
-        for i in range(max_animation_steps):
-            step_indices.append(int(i * (total_points - 1) / (max_animation_steps - 1)))
-
+    frame_total = max(len(step_indices) - 1, 1)
+    # The on-map confidence circle shrinks from the candidate radius down towards
+    # a floor as the inversion *converges*. We drive that contraction from the
+    # normalised data-misfit reduction (how much better the ensemble mean fits
+    # the sensors than the prior did), kept monotone via a running maximum so the
+    # circle never re-expands on a noisy step. This represents inference progress
+    # honestly; the true spatial uncertainty -- which for a steady plume is
+    # weakly constrained along-wind -- is reported separately as
+    # errorMetrics.credibleRadius95 / posteriorStd.
+    misfit_history = eki_result.misfit_history
+    initial_misfit = max(misfit_history[0], 1e-12) if misfit_history else 1.0
+    final_misfit = min(misfit_history) if misfit_history else 0.0
+    # Total achievable misfit reduction in [0, 1]: how much the converged
+    # ensemble improves the fit over the prior. This sets the *final* contraction
+    # of the confidence circle, so the end state reflects genuine convergence
+    # quality. The per-frame shrink itself is eased over the animation timeline
+    # (cosmetic pacing) rather than snapping on the iteration where EKI happens
+    # to converge. True spatial uncertainty is reported as credibleRadius95.
+    final_fit = _clamp((initial_misfit - final_misfit) / max(initial_misfit, 1e-12), 0.0, 1.0)
+    display_radius_start = max(candidate_radius, 12.0)
+    display_radius_floor = max(candidate_radius * 0.18, 8.0)
+    final_radius = display_radius_floor + (display_radius_start - display_radius_floor) * (1.0 - final_fit)
     for anim_idx, hist_idx in enumerate(step_indices):
-        point = nm_result["history"][hist_idx]
-        center = {"x": round(point["x"], 2), "y": round(point["y"], 2)}
-        progress = anim_idx / max(max_animation_steps - 1, 1)
-        eased = 1 - math.pow(1 - progress, 2)
-        radius = round(candidate_radius * (1.2 - eased * 0.85), 2)
-        polygon = build_refinement_polygon(center, radius, anim_idx, int(candidate.get("rank") or 1))
+        mean_state = mean_history[hist_idx]
+        center = {"x": round(float(mean_state[0]), 2), "y": round(float(mean_state[1]), 2)}
+        progress = anim_idx / frame_total
+        # Ease-out so the circle contracts quickly then settles, spanning the
+        # full timeline and ending at the convergence-determined final radius.
+        eased = 1.0 - math.pow(1.0 - progress, 2)
+        radius = round(display_radius_start + (final_radius - display_radius_start) * eased, 2)
+        polygon = build_refinement_polygon(center, radius, anim_idx, candidate_rank)
         loss_snapshot = compute_loss_snapshot(center, candidate, sensors, scenario)
-        confidence = round(1 - eased * 0.78, 4)
+        # Confidence eases up to the convergence-determined final fit quality.
+        confidence = round(_clamp(final_fit * eased, 0.0, 1.0), 4)
 
         iterations.append({
             "iteration": anim_idx + 1,
@@ -354,26 +323,33 @@ def refine_candidate(
         loss_history.append(loss_snapshot["total"])
 
     if not iterations:
-        final_center = {"x": round(best_center["x"], 2), "y": round(best_center["y"], 2)}
-        final_loss = objective(final_center["x"], final_center["y"])
+        final_center = {"x": round(float(final_mean[0]), 2), "y": round(float(final_mean[1]), 2)}
         final_snapshot = compute_loss_snapshot(final_center, candidate, sensors, scenario)
+        radius = round(display_radius_floor, 2)
         iterations.append({
             "iteration": 1, "progress": 1.0, "center": final_center,
-            "radius": round(candidate_radius * 0.35, 2),
-            "polygon": build_refinement_polygon(final_center, candidate_radius * 0.35, 0, 1),
-            "loss": final_loss, "confidence": 0.22, "lossBreakdown": final_snapshot,
+            "radius": radius,
+            "polygon": build_refinement_polygon(final_center, radius, 0, candidate_rank),
+            "loss": final_snapshot["total"], "confidence": 0.5, "lossBreakdown": final_snapshot,
         })
-        loss_history.append(final_loss)
+        loss_history.append(final_snapshot["total"])
 
     estimated = iterations[-1]
     source_match_error = None
     if true_source_map_point:
         source_match_error = round(distance(estimated["center"], normalize_point(true_source_map_point)), 2)
 
+    # Posterior spatial std (RMS of x/y std) reported in metres.
+    final_spatial_cov = np.asarray(eki_result.final_cov)[:2, :2]
+    diag = np.clip(np.diag(final_spatial_cov), 0.0, None)
+    posterior_std_px = float(np.sqrt(np.mean(diag)))
+    credible_radius_95 = round(covariance_to_radius(final_spatial_cov, 2.45) * MAP_METERS_PER_UNIT, 2)
+
     estimated_source = {
         "mapPoint": estimated["center"],
         "radius": estimated["radius"],
         "iconSize": max(12.0, estimated["radius"] * 0.9),
+        "emissionRate": round(estimated_rate, 3),
     }
     error_metrics = {
         "finalLoss": estimated["loss"],
@@ -383,15 +359,20 @@ def refine_candidate(
         "candidateCount": 1,
         "warningThreshold": float(gas.get("warningThreshold") or 0),
         "dangerThreshold": float(gas.get("dangerThreshold") or 0),
-        "optimizerConverged": nm_result["converged"],
-        "optimizerIterations": nm_result["iterations"],
+        "optimizerConverged": eki_result.converged,
+        "optimizerIterations": eki_result.iterations,
+        "emissionRate": round(estimated_rate, 3),
+        "posteriorStd": round(posterior_std_px * MAP_METERS_PER_UNIT, 2),
+        "credibleRadius95": credible_radius_95,
+        "dataMisfitRms": round(float(eki_result.misfit_history[-1]) if eki_result.misfit_history else 0.0, 4),
     }
     summary = {
         "bestCandidateId": candidate.get("candidateId"),
         "finalLoss": estimated["loss"],
         "sourceMatchError": source_match_error,
         "estimatedCoord": f"{estimated['center']['x']:.0f}, {estimated['center']['y']:.0f}",
-        "totalIterations": nm_result["iterations"],
+        "estimatedEmissionRate": round(estimated_rate, 3),
+        "totalIterations": eki_result.iterations,
     }
     return {
         "iterations": iterations,

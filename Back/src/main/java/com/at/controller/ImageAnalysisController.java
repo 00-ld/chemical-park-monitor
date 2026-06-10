@@ -24,8 +24,40 @@ public class ImageAnalysisController {
     @Resource
     private InspectRecordMapper inspectRecordMapper;
 
+    // 上传文件限制：仅允许常见图片类型，最大 10MB
+    private static final long MAX_FILE_SIZE = 10L * 1024 * 1024;
+    private static final java.util.Set<String> ALLOWED_CONTENT_TYPES =
+            java.util.Set.of("image/jpeg", "image/png", "image/jpg");
+    private static final java.util.Set<String> ALLOWED_EXTENSIONS =
+            java.util.Set.of("jpg", "jpeg", "png");
+
+    // 算法服务共享密钥，与 Python 服务的 ALGORITHM_API_KEY 一致
+    private static final String ALGORITHM_API_KEY = System.getenv("ALGORITHM_API_KEY");
+
     @PostMapping("/person")
     public ResponseEntity<String> analyzePerson(@RequestParam("file") MultipartFile file) {
+        // ===== 上传文件校验 =====
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().body("{\"status\":\"error\",\"message\":\"未上传文件\"}");
+        }
+        if (file.getSize() > MAX_FILE_SIZE) {
+            return ResponseEntity.status(413).body("{\"status\":\"error\",\"message\":\"文件过大，最大 10MB\"}");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase())) {
+            return ResponseEntity.badRequest().body("{\"status\":\"error\",\"message\":\"仅支持 JPG/PNG 图片\"}");
+        }
+        // 文件名安全化：去除路径分隔符，仅保留基础名，并校验扩展名
+        String rawName = file.getOriginalFilename();
+        String safeName = (rawName == null) ? "upload"
+                : rawName.replaceAll(".*[\\\\/]", "").replaceAll("[^A-Za-z0-9._-]", "_");
+        int dot = safeName.lastIndexOf('.');
+        String ext = (dot >= 0) ? safeName.substring(dot + 1).toLowerCase() : "";
+        if (!ALLOWED_EXTENSIONS.contains(ext)) {
+            return ResponseEntity.badRequest().body("{\"status\":\"error\",\"message\":\"文件扩展名不合法\"}");
+        }
+        final String filename = safeName;
+
         try {
             SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
             factory.setConnectTimeout(10000);
@@ -34,11 +66,15 @@ public class ImageAnalysisController {
             RestTemplate restTemplate = new RestTemplate(factory);
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            // 携带算法服务密钥（内网鉴权）
+            if (ALGORITHM_API_KEY != null && !ALGORITHM_API_KEY.isEmpty()) {
+                headers.set("X-API-Key", ALGORITHM_API_KEY);
+            }
 
             ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
                 @Override
                 public String getFilename() {
-                    return file.getOriginalFilename();
+                    return filename;
                 }
             };
 
@@ -49,7 +85,7 @@ public class ImageAnalysisController {
             String pythonUrl = "http://localhost:8001/api/analysis/person";
             String result = restTemplate.postForObject(pythonUrl, requestEntity, String.class);
 
-            log.info("人员分析请求完成, 文件名: {}", file.getOriginalFilename());
+            log.info("人员分析请求完成, 文件名: {}", filename);
 
             try {
                 JSONObject json = JSONObject.parseObject(result);
@@ -70,7 +106,7 @@ public class ImageAnalysisController {
 
             return ResponseEntity.ok(result);
         } catch (IOException e) {
-            log.error("文件读取失败: {}", file.getOriginalFilename(), e);
+            log.error("文件读取失败: {}", filename, e);
             return ResponseEntity.status(500).body("{\"status\":\"error\",\"message\":\"文件读取失败\"}");
         } catch (Exception e) {
             log.error("算法服务异常", e);
