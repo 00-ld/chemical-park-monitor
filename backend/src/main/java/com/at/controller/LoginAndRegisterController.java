@@ -20,20 +20,20 @@ public class LoginAndRegisterController {
     @Autowired
     private LoginService loginService;
 
-    // 简易限流：IP → {次数, 窗口起始时间}
-    private final ConcurrentHashMap<String, int[]> registerAttempts = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, int[]> loginAttempts = new ConcurrentHashMap<>();
+    // 简易限流：IP -> {次数, 窗口起始时间毫秒}
+    private final ConcurrentHashMap<String, long[]> registerAttempts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, long[]> loginAttempts = new ConcurrentHashMap<>();
     private static final int MAX_REGISTER_PER_MINUTE = 5;
     private static final int MAX_LOGIN_PER_MINUTE = 10;
 
     /**
      * 固定窗口限流：同一 key 在 1 分钟窗口内累加次数，超过 limit 返回 true（已超限）。
      */
-    private boolean isRateLimited(ConcurrentHashMap<String, int[]> attempts, String key, int limit) {
+    private boolean isRateLimited(ConcurrentHashMap<String, long[]> attempts, String key, int limit) {
         long now = System.currentTimeMillis();
-        int[] record = attempts.compute(key, (k, v) -> {
+        long[] record = attempts.compute(key, (k, v) -> {
             if (v == null || now - v[1] > 60_000) {
-                return new int[]{1, (int) now};
+                return new long[]{1, now};
             }
             v[0]++;
             return v;
@@ -47,7 +47,7 @@ public class LoginAndRegisterController {
         String ip = request.getRemoteAddr();
         if (isRateLimited(loginAttempts, ip, MAX_LOGIN_PER_MINUTE)) {
             log.warn("登录频率过高，IP: {}", ip);
-            return ResponseEntity.status(429).body(Result.error("登录过于频繁，请稍后再试"));
+            return ResponseEntity.status(429).body(Result.error(429, "登录过于频繁，请稍后再试"));
         }
 
         String token = loginService.login(user);
@@ -56,7 +56,7 @@ public class LoginAndRegisterController {
             return ResponseEntity.ok(Result.success(token));
         }
         log.warn("用户登录失败: {}", user.getUsername());
-        return ResponseEntity.status(401).body(Result.error("用户名或密码错误"));
+        return ResponseEntity.status(401).body(Result.error(401, "用户名或密码错误"));
     }
 
     @PostMapping("/register")
@@ -65,7 +65,7 @@ public class LoginAndRegisterController {
         String ip = request.getRemoteAddr();
         if (isRateLimited(registerAttempts, ip, MAX_REGISTER_PER_MINUTE)) {
             log.warn("注册频率过高，IP: {}", ip);
-            return ResponseEntity.status(429).body(Result.error("注册过于频繁，请稍后再试"));
+            return ResponseEntity.status(429).body(Result.error(429, "注册过于频繁，请稍后再试"));
         }
 
         boolean b = loginService.register(user);
@@ -74,6 +74,6 @@ public class LoginAndRegisterController {
             return ResponseEntity.ok(Result.success());
         }
         log.warn("用户注册失败, 用户名已存在: {}", user.getUsername());
-        return ResponseEntity.badRequest().body(Result.error("用户名已存在"));
+        return ResponseEntity.badRequest().body(Result.error(400, "用户名已存在"));
     }
 }
