@@ -374,6 +374,23 @@ export class PathPlanner {
     return this.network
   }
 
+  private createPathOptions(
+    startPoint: Point,
+    endPoint: Point,
+    options: Partial<PathPlanningOptions> = {}
+  ): PathPlanningOptions {
+    return {
+      obstacles: this.obstacles,
+      roads: this.roads,
+      windDirection: this.windDirection,
+      windSpeed: this.windSpeed,
+      gridSize: 20,
+      ...options,
+      startPoint,
+      endPoint
+    }
+  }
+
   findPath(options: PathPlanningOptions): PathResult {
     this.updateOptions(options)
 
@@ -577,11 +594,7 @@ export class PathPlanner {
   ): PathResult[] {
     const results: PathResult[] = []
     for (const exit of exitPoints) {
-      const result = this.findPath({
-        startPoint: leakPoint,
-        endPoint: exit,
-        ...options
-      })
+      const result = this.findPath(this.createPathOptions(leakPoint, exit, options))
       results.push(result)
     }
     results.sort((a, b) => {
@@ -606,11 +619,7 @@ export class PathPlanner {
       let minDist = Infinity
 
       for (const exit of exitPoints) {
-        const result = this.findPath({
-          startPoint: entrance,
-          endPoint: exit,
-          ...options
-        })
+        const result = this.findPath(this.createPathOptions(entrance, exit, options))
         if (result.distance < minDist) {
           minDist = result.distance
           bestRoute = result
