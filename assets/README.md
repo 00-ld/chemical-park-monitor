@@ -4,8 +4,8 @@
 
 ## 目录用途
 
-- `assets/img/`：从历史根目录整理过来的登录、注册等参考图片。
-- `assets/传感器点位设备/`：传感器、设备、化工园区场景等说明图片。
+- `assets/images/`：从历史根目录整理过来的登录、注册等参考图片。
+- `assets/equipment-images/`：传感器、设备、化工园区场景等说明图片。
 
 前端运行时必须直接加载的资源应优先放在 `frontend/public/` 或 `frontend/src/assets/`，不要在页面中跨目录引用本目录文件。
 
