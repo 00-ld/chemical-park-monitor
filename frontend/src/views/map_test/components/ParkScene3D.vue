@@ -13,18 +13,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-const props = defineProps<{
-  selectedFacilityId?: string
-}>()
+defineOptions({
+  name: 'ParkScene3D',
+})
 
 defineEmits<{
   (e: 'facility-click', id: string): void
 }>()
 
+const DEFAULT_IPORTAL_URL =
+  '/iportal/apps/mapdashboard/v2/index.html?id=1329945243&action=view&mode=pc'
+
 const viewerUrl = computed(() => {
-  const base = import.meta.env.VITE_APP_BASE_API || '/api'
-  // 3D viewer is served as static file at /3d_viewer/
-  return '/3d_viewer/'
+  return import.meta.env.VITE_IPORTAL_DASHBOARD_URL || DEFAULT_IPORTAL_URL
 })
 </script>
 
