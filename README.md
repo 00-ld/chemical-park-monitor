@@ -133,16 +133,187 @@ SuperMap iPortal 数字大屏地址通过 `VITE_IPORTAL_DASHBOARD_URL` 配置。
 
 ## 服务器部署
 
-生产部署目标域名预留为 `www.cip.lab6119.xyz`，部署入口在 `deploy/`：
+生产部署目标域名为 `www.cip.lab6119.xyz`，部署入口在 `deploy/`。推荐使用 Docker Compose 统一运行 Nginx、Java 后端、Python 算法服务和 MySQL。
+
+### 1. 服务器准备
+
+推荐环境：
+
+| 项 | 建议 |
+| --- | --- |
+| 操作系统 | Ubuntu 22.04 / Debian 12 |
+| 配置 | 2 核 4 GB 起步，40 GB 磁盘起步 |
+| 运行环境 | Docker、Docker Compose |
+| 开放端口 | `80`、`443`、`22` |
+| 域名 | `www.cip.lab6119.xyz` 解析到服务器公网 IP |
+
+安装 Docker：
 
 ```bash
-cd deploy
+curl -fsSL https://get.docker.com | sh
+systemctl enable docker
+systemctl start docker
+docker --version
+docker compose version
+```
+
+MySQL、Java 后端和 Python 算法服务不应直接暴露公网，应由 Nginx 统一代理。
+
+### 2. 获取代码
+
+在服务器上拉取代码：
+
+```bash
+cd /opt
+git clone https://github.com/00-ld/chemical-park-monitor.git chemical-park
+cd /opt/chemical-park
+```
+
+如果服务器上已经存在项目：
+
+```bash
+cd /opt/chemical-park
+git pull origin main
+```
+
+### 3. 配置生产环境变量
+
+真实密钥只允许保存在服务器本地 `.env` 文件中，不得提交到 GitHub：
+
+```bash
+cd /opt/chemical-park/deploy
 cp .env.example .env
+nano .env
+```
+
+至少需要替换以下变量：
+
+```env
+MYSQL_ROOT_PASSWORD=replace_with_strong_mysql_root_password
+JWT_SECRET=replace_with_random_32_char_min_secret
+ALGORITHM_API_KEY=replace_with_random_algorithm_key
+CORS_ALLOWED_ORIGINS=http://www.cip.lab6119.xyz,https://www.cip.lab6119.xyz
+ALGORITHM_CORS_ORIGINS=http://www.cip.lab6119.xyz,https://www.cip.lab6119.xyz
+```
+
+如果后续部署 YOLO/人员识别独立服务，再配置：
+
+```env
+ANALYSIS_SERVICE_URL=http://analysis-service:8100
+```
+
+### 4. 构建前端和后端
+
+在服务器或本地构建均可。服务器构建示例：
+
+```bash
+cd /opt/chemical-park/frontend
+npm install
+npm run build:pro
+
+cd ../backend
+mvn clean package -DskipTests
+cp target/chemical-backend-1.0.0.jar ../deploy/backend/chemical-backend-1.0.0.jar
+```
+
+构建完成后应存在：
+
+```text
+frontend/dist/
+deploy/backend/chemical-backend-1.0.0.jar
+```
+
+这些构建产物用于服务器运行，但不要提交到 GitHub。
+
+### 5. 启动 Docker 服务
+
+```bash
+cd /opt/chemical-park/deploy
 docker compose --env-file .env config
+docker compose --env-file .env up -d --build
+docker compose ps
+```
+
+查看日志：
+
+```bash
+docker compose logs -f nginx
+docker compose logs -f backend
+docker compose logs -f algorithm
+docker compose logs -f mysql
+```
+
+### 6. 验证访问
+
+服务器本机验证：
+
+```bash
+curl http://127.0.0.1/
+curl http://127.0.0.1/algorithm-api/api/health
+```
+
+域名验证：
+
+```bash
+curl http://www.cip.lab6119.xyz/
+curl http://www.cip.lab6119.xyz/algorithm-api/api/health
+```
+
+浏览器访问：
+
+```text
+http://www.cip.lab6119.xyz
+```
+
+如果 SuperMap iPortal 数字大屏无法加载，检查 `frontend/.env.production` 中的 `VITE_IPORTAL_DASHBOARD_URL`，并确认 iPortal 服务、Nginx 代理和浏览器 iframe 策略允许访问。
+
+### 7. HTTPS 建议
+
+生产环境建议启用 HTTPS：
+
+1. 确认 `www.cip.lab6119.xyz` 已解析到服务器公网 IP。
+2. 使用 Certbot、云厂商证书或反向代理平台申请 TLS 证书。
+3. 在 `deploy/nginx/default.conf` 中增加 443 配置。
+4. HTTPS 验证正常后，再考虑启用 HSTS。
+
+### 8. 更新与回滚
+
+更新到最新版：
+
+```bash
+cd /opt/chemical-park
+git pull origin main
+
+cd frontend
+npm install
+npm run build:pro
+
+cd ../backend
+mvn clean package -DskipTests
+cp target/chemical-backend-1.0.0.jar ../deploy/backend/chemical-backend-1.0.0.jar
+
+cd ../deploy
 docker compose --env-file .env up -d --build
 ```
 
-上线前必须替换 `.env` 中的占位变量，并确认 Nginx、后端、算法服务、MySQL 和 iPortal iframe 地址均指向生产环境。详细部署路线见 [docs/technical-route-to-deployment.md](docs/technical-route-to-deployment.md) 和 [deploy/README.md](deploy/README.md)。
+回滚到指定提交：
+
+```bash
+cd /opt/chemical-park
+git log --oneline
+git checkout <commit>
+```
+
+回滚后重新构建并启动 Docker 服务即可。
+
+### 9. 部署禁止事项
+
+- 不要把真实 `.env`、数据库密码、JWT 密钥、算法 API Key、证书私钥提交到 GitHub。
+- 不要提交 `frontend/dist/`、`backend/target/`、`.venv/`、`node_modules/`、`__pycache__/`、`.npy`、模型权重或生产数据库备份。
+- 不要在前端代码中写死生产密钥、数据库连接、服务器绝对路径或第三方 API Key。
+- 不要让 MySQL、算法服务、模型推理服务直接暴露到公网。
+
+详细部署路线见 [docs/technical-route-to-deployment.md](docs/technical-route-to-deployment.md) 和 [deploy/README.md](deploy/README.md)。
 
 ## 测试与验证
 
