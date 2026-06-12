@@ -1,4 +1,4 @@
-services:
+﻿services:
   # Nginx - 前端静态文件 + 反向代理
   nginx:
     image: nginx:alpine
@@ -12,7 +12,7 @@ services:
     volumes:
       # 以模板方式挂载，容器启动时 envsubst 注入密钥后生成最终配置
       - ./nginx/default.conf:/etc/nginx/templates/default.conf.template:ro
-      - ../Manage/dist:/usr/share/nginx/html:ro
+      - ../frontend/dist:/usr/share/nginx/html:ro
     depends_on:
       - backend
       - algorithm
@@ -43,7 +43,7 @@ services:
   # Python 算法服务
   algorithm:
     build:
-      context: ../python
+      context: ../algorithm
       dockerfile: ../deploy/algorithm/Dockerfile
     container_name: chemical-algorithm
     environment:

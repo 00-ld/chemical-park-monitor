@@ -1,4 +1,4 @@
-# 化工园区智能监测系统 — 开发改造总结
+﻿# 化工园区智能监测系统 — 开发改造总结
 
 ## 一、项目概述
 
@@ -20,12 +20,12 @@
 
 ### 2.2 Python API 统一响应格式
 
-- 创建 `python/response_utils.py`：`success_response()` / `error_response()`
+- 创建 `algorithm/response_utils.py`：`success_response()` / `error_response()`
 - 统一格式：`{"success": bool, "data": ... | null, "error": str | null, "code": int}`
 - 全局异常处理器 `@app.exception_handler(Exception)`
 - 涉及：`api_server.py`、`engine/task_router.py`
 
-### 2.3 Java 后端规范化（Back/）
+### 2.3 Java 后端规范化（backend/）
 
 | 操作 | 详情 |
 |------|------|
@@ -36,7 +36,7 @@
 | 清理 | 删除 22 个 JVM 崩溃日志文件（`hs_err_pid*`、`replay_pid*`） |
 | 端口变更 | 8080 → 8081（被 WeChat Server Manager 占用） |
 
-### 2.4 Vue3 前端规范化（Manage/src/）
+### 2.4 Vue3 前端规范化（frontend/src/）
 
 | 操作 | 详情 |
 |------|------|
@@ -52,7 +52,7 @@
 
 | 删除内容 | 文件数 | 说明 |
 |----------|--------|------|
-| Python 代码副本 | 15 | `gas_zero_backend_system/python/` |
+| Python 代码副本 | 15 | `gas_zero_backend_system/algorithm/` |
 | Pyodide Worker | 3 | 浏览器内运行 Python 的 Worker |
 | JS 算法实现 | 9 | diffusion, pinn, evacuation 等 |
 | 类型声明 | 1 | `*.py?raw` 声明 |
@@ -156,15 +156,15 @@
 
 ```bash
 # 1. Python 算法服务（端口 8000）
-cd python
+cd algorithm
 python -m uvicorn api_server:app --host 127.0.0.1 --port 8000 --reload
 
 # 2. Java 后端（端口 8081）
-cd Back
+cd backend
 mvn spring-boot:run
 
 # 3. 前端（端口 5173）
-cd Manage
+cd frontend
 npm run dev
 ```
 

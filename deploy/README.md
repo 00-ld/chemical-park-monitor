@@ -1,4 +1,4 @@
-# 部署指南
+﻿# 部署指南
 
 本文说明如何把化工园区危险气体扩散与溯源系统部署到服务器，并挂载到 `www.cip.lab6119.xyz` 域名下。
 
@@ -7,7 +7,7 @@
 ```text
 Browser
   -> Nginx :80
-       -> static frontend files from Manage/dist
+       -> static frontend files from frontend/dist
        -> /api/*           -> Java backend :8081
        -> /algorithm-api/* -> Python algorithm service :8000
   -> SuperMap iPortal dashboard through VITE_IPORTAL_DASHBOARD_URL
@@ -46,12 +46,12 @@ docker compose version
 
 ```bash
 # 前端
-cd Manage
+cd frontend
 npm install
 npm run build:pro
 
 # Java 后端
-cd ../Back
+cd ../backend
 mvn clean package -DskipTests
 
 # 回到项目根目录
@@ -61,20 +61,20 @@ cd ..
 构建完成后应存在：
 
 ```text
-Manage/dist/
-Back/target/chemical-backend-1.0.0.jar
+frontend/dist/
+backend/target/chemical-backend-1.0.0.jar
 ```
 
 将后端 jar 放到部署目录：
 
 ```powershell
-Copy-Item Back/target/chemical-backend-1.0.0.jar deploy/backend/chemical-backend-1.0.0.jar
+Copy-Item backend/target/chemical-backend-1.0.0.jar deploy/backend/chemical-backend-1.0.0.jar
 ```
 
 Linux/macOS 可使用：
 
 ```bash
-cp Back/target/chemical-backend-1.0.0.jar deploy/backend/chemical-backend-1.0.0.jar
+cp backend/target/chemical-backend-1.0.0.jar deploy/backend/chemical-backend-1.0.0.jar
 ```
 
 ## 4. 上传到服务器
@@ -89,9 +89,9 @@ scp -r C:/Users/colorful/Desktop/localhost root@服务器IP:/opt/chemical-park
 
 ```text
 /opt/chemical-park/
-  Back/
-  Manage/
-  python/
+  backend/
+  frontend/
+  algorithm/
   deploy/
     backend/chemical-backend-1.0.0.jar
     docker-compose.yml
@@ -166,7 +166,7 @@ curl http://www.cip.lab6119.xyz/algorithm-api/api/health
 http://www.cip.lab6119.xyz
 ```
 
-如果三维大屏无法加载，检查 `Manage/.env.production` 中的 `VITE_IPORTAL_DASHBOARD_URL` 和 Nginx/iPortal 代理配置。
+如果三维大屏无法加载，检查 `frontend/.env.production` 中的 `VITE_IPORTAL_DASHBOARD_URL` 和 Nginx/iPortal 代理配置。
 
 ## 8. HTTPS 建议
 
@@ -185,11 +185,11 @@ http://www.cip.lab6119.xyz
 cd /opt/chemical-park
 git pull origin main
 
-cd Manage
+cd frontend
 npm install
 npm run build:pro
 
-cd ../Back
+cd ../backend
 mvn clean package -DskipTests
 cp target/chemical-backend-1.0.0.jar ../deploy/backend/chemical-backend-1.0.0.jar
 
@@ -233,6 +233,6 @@ docker exec -it chemical-mysql bash
 ## 11. 禁止事项
 
 - 不要把真实 `.env`、数据库密码、JWT 密钥、算法 API Key、证书私钥提交到 GitHub。
-- 不要提交 `Manage/dist/`、`Back/target/`、`.venv/`、`node_modules/`、`__pycache__/`、`.npy`、模型权重或生产数据库备份。
+- 不要提交 `frontend/dist/`、`backend/target/`、`.venv/`、`node_modules/`、`__pycache__/`、`.npy`、模型权重或生产数据库备份。
 - 不要把桌面 `gas/` 中的视频工程、缓存、大型验证数据集整体复制进仓库。
 - 不要在前端代码里写死生产密钥或只适用于个人电脑的绝对路径。

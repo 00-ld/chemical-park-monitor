@@ -1,4 +1,4 @@
-# 数据库目录说明
+﻿# 数据库目录说明
 
 `db/` 是项目数据库资产的统一入口，用于说明 MySQL 初始化、迁移、种子数据、测试数据、ER 说明和备份规则。
 
@@ -25,9 +25,9 @@ db/
 | 初始化 | `deploy/mysql/init.sql` | Docker MySQL 容器启动时执行的主初始化脚本。 |
 | 迁移 | `deploy/mysql/migration_add_role.sql` | 为用户表增加角色字段的迁移脚本。 |
 | 种子数据 | `deploy/mysql/sensor_data.sql` | 传感器点位种子数据。 |
-| 后端本地资源 | `Back/src/main/resources/schema-gas.sql` | 气体类型表局部建表脚本。 |
-| 后端本地资源 | `Back/src/main/resources/schema-sensor.sql` | 传感器与布局表局部建表脚本。 |
-| 后端本地资源 | `Back/src/main/resources/init-sensor-db.sql` | 传感器相关初始化脚本。 |
+| 后端本地资源 | `backend/src/main/resources/schema-gas.sql` | 气体类型表局部建表脚本。 |
+| 后端本地资源 | `backend/src/main/resources/schema-sensor.sql` | 传感器与布局表局部建表脚本。 |
+| 后端本地资源 | `backend/src/main/resources/init-sensor-db.sql` | 传感器相关初始化脚本。 |
 
 ## 强制要求
 

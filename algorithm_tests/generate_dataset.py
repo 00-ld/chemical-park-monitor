@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GasModelTest 数据集生成脚本
+algorithm_tests 数据集生成脚本
 ============================
 为气体扩散模型(正向)与溯源模型(反演)生成可复现的测试数据集。
 
@@ -252,7 +252,7 @@ def main():
                    float(noisy4.min()), float(noisy4.max())))
 
     # ---------------- Sanity check 汇总 ----------------
-    print("\n=== GasModelTest 数据集生成完成 ===")
+    print("\n=== algorithm_tests 数据集生成完成 ===")
     print(f"随机种子: {cfg['random_seed']}\n")
     print(f"{'文件':<38}{'形状':<20}{'min':>12}{'max':>12}")
     print("-" * 82)

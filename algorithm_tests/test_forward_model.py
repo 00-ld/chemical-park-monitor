@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""GasModelTest Case 1 正向高斯烟羽模型精度验证脚本。
+"""algorithm_tests Case 1 正向高斯烟羽模型精度验证脚本。
 
 直接 import 项目算法 ``python.diffusion.gaussian_plume``，在与数据集完全
 相同的网格 / 源参数 / 风速 / 稳定度上调用当前实现，得到模型预测浓度场，
@@ -15,7 +15,7 @@
     - 直接给算法传源参数与风速 u=5, 不走 10m 风廓线换算, 以隔离 σ 公式影响
 
 复跑:
-    python GasModelTest/test_forward_model.py
+    python algorithm_tests/test_forward_model.py
 依赖: numpy, pandas (项目已装)
 """
 from __future__ import annotations
@@ -27,14 +27,14 @@ import sys
 import numpy as np
 import pandas as pd
 
-# --- 直接按文件路径加载待测模块 python/diffusion/gaussian_plume.py ---
-# (项目 python/diffusion/__init__.py 会触发 diffusion_runner 等无关依赖链,
+# --- 直接按文件路径加载待测模块 algorithm/diffusion/gaussian_plume.py ---
+# (项目 algorithm/diffusion/__init__.py 会触发 diffusion_runner 等无关依赖链,
 #  这里只想隔离测试纯物理模块, 故用 importlib 单文件加载。)
 import importlib.util  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(HERE)
-_GP_PATH = os.path.join(PROJECT_ROOT, "python", "diffusion", "gaussian_plume.py")
+_GP_PATH = os.path.join(PROJECT_ROOT, "algorithm", "diffusion", "gaussian_plume.py")
 _spec = importlib.util.spec_from_file_location("gaussian_plume", _GP_PATH)
 gp = importlib.util.module_from_spec(_spec)
 sys.modules["gaussian_plume"] = gp  # 让模块内 @dataclass 能解析自身模块
@@ -143,7 +143,7 @@ def fmt(v, n=4):
 
 def main():
     print("=" * 96)
-    print("GasModelTest Case 1 — 正向高斯烟羽模型精度验证")
+    print("algorithm_tests Case 1 — 正向高斯烟羽模型精度验证")
     print("源: x=0 y=0 H=50m Q=100g/s, u=5m/s, open-country, 比较单位 mg/m^3")
     print("=" * 96)
 
@@ -199,7 +199,7 @@ def main():
     print("\n[表4] 3D 体数据对比 (plume_3d_D.npy, shape [nx,ny,nz])")
     truth3d_path = os.path.join(CASE1, "plume_3d_D.npy")
     if not os.path.exists(truth3d_path):
-        print("跳过: plume_3d_D.npy 未提交到仓库。需要 3D 对比时请先运行 GasModelTest/generate_dataset.py 生成。")
+        print("跳过: plume_3d_D.npy 未提交到仓库。需要 3D 对比时请先运行 algorithm_tests/generate_dataset.py 生成。")
     else:
         truth3d = np.load(truth3d_path).astype(float)
         pred3d = predict_3d_field("D")

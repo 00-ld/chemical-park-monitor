@@ -1,4 +1,4 @@
-# Java
+﻿# Java
 target/
 *.class
 *.jar
@@ -11,7 +11,7 @@ dist/
 npm-debug.log*
 
 # Python
-python/.venv/
+algorithm/.venv/
 **/__pycache__/
 *.pyc
 *.pyo
@@ -54,14 +54,14 @@ chemical-park-monitor/
 *.swp
 
 # Build artifacts (large)
-Manage/dist2/
+frontend/dist2/
 
 # Sensitive configs
 .codex/
 deploy/upload.py
 deploy/.env
 deploy/migrate_passwords.py
-Back/src/main/resources/application-local.properties
+backend/src/main/resources/application-local.properties
 
 # ML models
 *.pt

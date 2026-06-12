@@ -1,4 +1,4 @@
-# 开发指南
+﻿# 开发指南
 
 ## 环境要求
 
@@ -14,14 +14,14 @@
 
 ```
 localhost/
-├── Back/                 # Java Spring Boot 后端
+├── backend/                 # Java Spring Boot 后端
 │   ├── src/main/java/    # Java 源码
 │   └── pom.xml           # Maven 配置
-├── Manage/               # Vue3 + TypeScript 前端
+├── frontend/               # Vue3 + TypeScript 前端
 │   ├── src/              # 前端源码
 │   ├── package.json      # npm 依赖
 │   └── vite.config.ts    # Vite 配置
-├── python/               # Python 算法服务
+├── algorithm/               # Python 算法服务
 │   ├── api_server.py     # FastAPI 入口
 │   ├── diffusion/        # 气体扩散模块
 │   ├── inversion/        # PINN 溯源模块
@@ -36,7 +36,7 @@ localhost/
 ### 1. Java 后端
 
 ```bash
-cd Back
+cd backend
 mvn spring-boot:run
 # 服务运行在 http://localhost:8080
 ```
@@ -44,7 +44,7 @@ mvn spring-boot:run
 ### 2. Python 算法服务
 
 ```bash
-cd python
+cd algorithm
 
 # 创建虚拟环境（首次）
 python -m venv .venv
@@ -65,7 +65,7 @@ uvicorn api_server:app --host 127.0.0.1 --port 8000 --reload
 ### 3. 前端
 
 ```bash
-cd Manage
+cd frontend
 npm install
 npm run dev
 # 服务运行在 http://localhost:5173
@@ -84,19 +84,19 @@ npm run dev
 
 ```bash
 # 前端
-cd Manage
+cd frontend
 npm run lint          # ESLint 检查
 npm run fix           # ESLint 自动修复
 npm run format        # Prettier 格式化
 npm run lint:style    # StyleLint 样式检查
 
 # Python
-cd python
+cd algorithm
 ruff check .          # ruff 检查
 ruff format .         # ruff 格式化
 
 # Java
-cd Back
+cd backend
 mvn compile           # 编译检查
 ```
 
@@ -104,18 +104,18 @@ mvn compile           # 编译检查
 
 ```bash
 # 前端
-cd Manage && npm run build
+cd frontend && npm run build
 
 # Java 后端
-cd Back && mvn package
+cd backend && mvn package
 
 # Python（语法检查）
-cd python && python -m py_compile api_server.py
+cd algorithm && python -m py_compile api_server.py
 ```
 
 ## 环境变量
 
-### 前端 (`Manage/.env.*`)
+### 前端 (`frontend/.env.*`)
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|

@@ -1,4 +1,4 @@
-# GasModelTest - 气体扩散与溯源模型测试数据
+﻿# algorithm_tests - 气体扩散与溯源模型测试数据
 
 本目录用于保存小体积、可复现的算法回归测试数据，覆盖气体扩散正向模型、传感器观测数据和溯源模型输入样例。
 
@@ -14,13 +14,13 @@
 在项目根目录运行：
 
 ```bash
-python GasModelTest/test_forward_model.py
+python algorithm_tests/test_forward_model.py
 ```
 
 当前仓库内保留了 2D CSV 和传感器观测 CSV，因此该命令可以直接完成 2D 稳态烟羽验证。若需要 3D 体数据对比，先运行：
 
 ```bash
-python GasModelTest/generate_dataset.py
+python algorithm_tests/generate_dataset.py
 ```
 
 生成的 `.npy` 文件会被 `.gitignore` 排除，只作为本地验证产物。
@@ -28,7 +28,7 @@ python GasModelTest/generate_dataset.py
 ## 数据目录
 
 ```text
-GasModelTest/
+algorithm_tests/
   config.json                         全局生成参数与随机种子
   generate_dataset.py                 可复现数据生成脚本
   test_forward_model.py               正向扩散模型回归验证脚本

@@ -1,4 +1,4 @@
-{
+﻿{
   "database": "chemical",
   "engine": "MySQL",
   "charset": "utf8mb4",
@@ -21,17 +21,17 @@
       "purpose": "Seed sensor placement data based on the project layout plan."
     },
     {
-      "path": "Back/src/main/resources/schema-gas.sql",
+      "path": "backend/src/main/resources/schema-gas.sql",
       "type": "schema-fragment",
       "purpose": "Gas type table schema for backend local initialization."
     },
     {
-      "path": "Back/src/main/resources/schema-sensor.sql",
+      "path": "backend/src/main/resources/schema-sensor.sql",
       "type": "schema-fragment",
       "purpose": "Sensor and sensor layout table schema for backend local initialization."
     },
     {
-      "path": "Back/src/main/resources/init-sensor-db.sql",
+      "path": "backend/src/main/resources/init-sensor-db.sql",
       "type": "schema-and-seed-fragment",
       "purpose": "Sensor-related backend local initialization."
     }
