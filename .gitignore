@@ -70,6 +70,10 @@ logs/*
 # Build artifacts (large)
 frontend/dist2/
 
+# Large frontend media must be reviewed before being tracked
+*.mp4
+*.glb
+
 # Sensitive configs
 .codex/
 deploy/upload.py
