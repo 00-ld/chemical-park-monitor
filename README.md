@@ -35,6 +35,7 @@
   db/                数据库目录台账、脚本索引和维护规则
   deploy/            Docker、Nginx、MySQL 初始化和部署配置
   docs/              项目总体要求、接口文档、数据集来源、架构说明
+  docs/references/   政策、算法、设备等参考资料
   tools/             审计、校验、数据整理等辅助工具脚本
   img/               项目图片资源
 ```
