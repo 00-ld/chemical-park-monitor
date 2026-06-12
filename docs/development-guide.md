@@ -38,7 +38,7 @@ localhost/
 ```bash
 cd backend
 mvn spring-boot:run
-# 服务运行在 http://localhost:8080
+# 服务运行在 http://localhost:8081
 ```
 
 ### 2. Python 算法服务
@@ -75,7 +75,7 @@ npm run dev
 
 打开浏览器访问 `http://localhost:5173`
 
-- 前端 → `localhost:5173` → 代理 `/api/*` 到 Java 后端 `:8080`
+- 前端 → `localhost:5173` → 代理 `/api/*` 到 Java 后端 `:8081`
 - 前端 → `localhost:5173` → 代理 `/algorithm-api/*` 到 Python 算法 `:8000`
 
 ## 开发工作流
@@ -120,7 +120,7 @@ cd algorithm && python -m py_compile api_server.py
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `VITE_APP_BASE_API` | `/api` | Java 后端 API 前缀 |
-| `VITE_SERVE` | `http://localhost:8080` | Java 后端地址 |
+| `VITE_SERVE` | `http://localhost:8081` | Java 后端地址 |
 | `VITE_ALGORITHM_BASE_API` | `/algorithm-api` | Python 算法 API 前缀 |
 | `VITE_ALGORITHM_SERVE` | `http://localhost:8000` | Python 算法地址 |
 
