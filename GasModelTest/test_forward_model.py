@@ -4,7 +4,8 @@
 
 直接 import 项目算法 ``python.diffusion.gaussian_plume``，在与数据集完全
 相同的网格 / 源参数 / 风速 / 稳定度上调用当前实现，得到模型预测浓度场，
-再与解析解真值 (stability_A..F.csv, plume_3d_D.npy) 逐档对比。
+再与解析解真值 (stability_A..F.csv) 逐档对比。3D 体数据文件较大，默认不提交；
+若本地存在 plume_3d_D.npy，则额外执行 3D 对比。
 
 单位约定:
     - 数据集真值: mg/m^3
@@ -196,34 +197,38 @@ def main():
 
     # ---- 3D 剖面对比 (中性 D) ----
     print("\n[表4] 3D 体数据对比 (plume_3d_D.npy, shape [nx,ny,nz])")
-    truth3d = np.load(os.path.join(CASE1, "plume_3d_D.npy")).astype(float)
-    pred3d = predict_3d_field("D")
-    m3d = gp.comparison_statistics(pred3d, truth3d)
-    print(f"全场: FAC2={fmt(m3d['FAC2'],3)} FB={fmt(m3d['FB'],3)} "
-          f"NMSE={fmt(m3d['NMSE'],3)} 真值max={fmt(truth3d.max(),5)} "
-          f"预测max={fmt(pred3d.max(),5)}")
-    print(f"{'高度层 z(m)':<12}{'FAC2':>8}{'FB':>10}{'NMSE':>12}"
-          f"{'层max_真值':>14}{'层max_预测':>14}")
-    print("-" * 70)
-    for zi in [0, 10, 20, 25, 30]:  # z 索引 -> z = zi*5 m
-        t_layer = truth3d[:, :, zi]
-        p_layer = pred3d[:, :, zi]
-        mm = gp.comparison_statistics(p_layer, t_layer)
-        print(f"{Z[zi]:<12.0f}{fmt(mm['FAC2'],3):>8}{fmt(mm['FB'],3):>10}"
-              f"{fmt(mm['NMSE'],3):>12}{fmt(t_layer.max(),4):>14}"
-              f"{fmt(p_layer.max(),4):>14}")
+    truth3d_path = os.path.join(CASE1, "plume_3d_D.npy")
+    if not os.path.exists(truth3d_path):
+        print("跳过: plume_3d_D.npy 未提交到仓库。需要 3D 对比时请先运行 GasModelTest/generate_dataset.py 生成。")
+    else:
+        truth3d = np.load(truth3d_path).astype(float)
+        pred3d = predict_3d_field("D")
+        m3d = gp.comparison_statistics(pred3d, truth3d)
+        print(f"全场: FAC2={fmt(m3d['FAC2'],3)} FB={fmt(m3d['FB'],3)} "
+              f"NMSE={fmt(m3d['NMSE'],3)} 真值max={fmt(truth3d.max(),5)} "
+              f"预测max={fmt(pred3d.max(),5)}")
+        print(f"{'高度层 z(m)':<12}{'FAC2':>8}{'FB':>10}{'NMSE':>12}"
+              f"{'层max_真值':>14}{'层max_预测':>14}")
+        print("-" * 70)
+        for zi in [0, 10, 20, 25, 30]:  # z 索引 -> z = zi*5 m
+            t_layer = truth3d[:, :, zi]
+            p_layer = pred3d[:, :, zi]
+            mm = gp.comparison_statistics(p_layer, t_layer)
+            print(f"{Z[zi]:<12.0f}{fmt(mm['FAC2'],3):>8}{fmt(mm['FB'],3):>10}"
+                  f"{fmt(mm['NMSE'],3):>12}{fmt(t_layer.max(),4):>14}"
+                  f"{fmt(p_layer.max(),4):>14}")
 
-    # 沿羽轴 (y=0) 垂直剖面在 x=500 处对比
-    ix500 = int(np.argmin(np.abs(X - 500.0)))
-    iy0 = int(np.argmin(np.abs(Y - 0.0)))
-    print(f"\n[表5] x=500m, y=0 垂直廓线对比 (mg/m^3)")
-    print(f"{'z(m)':>6}{'真值':>12}{'预测':>12}{'比值':>8}")
-    print("-" * 38)
-    for zi in [0, 5, 10, 15, 20, 30, 40]:
-        tv = truth3d[ix500, iy0, zi]
-        pv = pred3d[ix500, iy0, zi]
-        rr = pv / tv if tv > 0 else float("nan")
-        print(f"{Z[zi]:>6.0f}{fmt(tv,4):>12}{fmt(pv,4):>12}{fmt(rr,3):>8}")
+        # 沿羽轴 (y=0) 垂直剖面在 x=500 处对比
+        ix500 = int(np.argmin(np.abs(X - 500.0)))
+        iy0 = int(np.argmin(np.abs(Y - 0.0)))
+        print(f"\n[表5] x=500m, y=0 垂直廓线对比 (mg/m^3)")
+        print(f"{'z(m)':>6}{'真值':>12}{'预测':>12}{'比值':>8}")
+        print("-" * 38)
+        for zi in [0, 5, 10, 15, 20, 30, 40]:
+            tv = truth3d[ix500, iy0, zi]
+            pv = pred3d[ix500, iy0, zi]
+            rr = pv / tv if tv > 0 else float("nan")
+            print(f"{Z[zi]:>6.0f}{fmt(tv,4):>12}{fmt(pv,4):>12}{fmt(rr,3):>8}")
 
     print("\n完成。")
 

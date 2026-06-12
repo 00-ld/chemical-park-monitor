@@ -1,40 +1,23 @@
 {
-  "description": "连续点源高斯烟羽稳态地面浓度场 + 3D体数据",
+  "description": "Continuous point-source Gaussian plume ground concentration fields.",
+  "data_type": "synthetic_analytic",
   "source": {
     "x": 0.0,
     "y": 0.0,
     "H": 50.0,
     "Q": 100.0,
-    "_comment": "H=有效排放高度 m, Q=源强 g/s"
+    "unit_note": "H in m, Q in g/s"
   },
   "wind_speed_m_s": 5.0,
-  "stability_classes": [
-    "A",
-    "B",
-    "C",
-    "D",
-    "E",
-    "F"
-  ],
+  "stability_classes": ["A", "B", "C", "D", "E", "F"],
   "grid": {
-    "x": [
-      0.0,
-      2000.0,
-      201
-    ],
-    "y": [
-      -500.0,
-      500.0,
-      101
-    ],
-    "z": [
-      0.0,
-      200.0,
-      41
-    ]
+    "x": [0.0, 2000.0, 201],
+    "y": [-500.0, 500.0, 101],
+    "z": [0.0, 200.0, 41]
   },
   "unit": "mg/m^3",
-  "sigma_formula": "Briggs open-country PG",
-  "csv_layout": "行=y横风向, 列=x下风向, 值=z=0地面浓度",
-  "npy_layout": "shape [nx, ny, nz] (indexing='ij')"
+  "sigma_formula": "Briggs open-country Pasquill-Gifford",
+  "csv_layout": "Rows are y coordinates, columns are x coordinates, values are z=0 ground concentration.",
+  "npy_layout": "Optional generated file plume_3d_D.npy uses shape [nx, ny, nz] with indexing='ij'.",
+  "npy_committed": false
 }

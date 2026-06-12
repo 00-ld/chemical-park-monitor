@@ -1,11 +1,12 @@
 {
-  "description": "瞬时点源烟团浓度时空演化 + 受体点时序",
+  "description": "Instantaneous point-source puff concentration time series at fixed receptors.",
+  "data_type": "synthetic_analytic",
   "source": {
     "x0": 0.0,
     "y0": 0.0,
     "H": 30.0,
     "mass": 5000.0,
-    "_comment": "mass=瞬时释放总质量 g"
+    "unit_note": "mass in g"
   },
   "wind_speed_m_s": 4.0,
   "stability": "D",
@@ -16,31 +17,12 @@
     "unit": "s"
   },
   "receptors": [
-    {
-      "name": "R1",
-      "x": 200.0,
-      "y": 0.0,
-      "z": 1.5
-    },
-    {
-      "name": "R2",
-      "x": 500.0,
-      "y": 0.0,
-      "z": 1.5
-    },
-    {
-      "name": "R3",
-      "x": 800.0,
-      "y": 50.0,
-      "z": 1.5
-    },
-    {
-      "name": "R4",
-      "x": 1200.0,
-      "y": -50.0,
-      "z": 1.5
-    }
+    {"name": "R1", "x": 200.0, "y": 0.0, "z": 1.5},
+    {"name": "R2", "x": 500.0, "y": 0.0, "z": 1.5},
+    {"name": "R3", "x": 800.0, "y": 50.0, "z": 1.5},
+    {"name": "R4", "x": 1200.0, "y": -50.0, "z": 1.5}
   ],
   "unit": "mg/m^3",
-  "npy_layout": "shape [nt, ny, nx], z=1.5m 地面层"
+  "npy_layout": "Optional generated file puff_concentration.npy uses shape [nt, ny, nx] at z=1.5m.",
+  "npy_committed": false
 }
