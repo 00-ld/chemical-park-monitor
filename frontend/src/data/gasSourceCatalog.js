@@ -9,11 +9,11 @@ export const GAS_SOURCE_CATALOG = [
     description: '允许位于一氧化碳钢瓶库及相关工艺区附近',
   },
   {
-    gasId: 'h2s',
-    gasName: '硫化氢',
+    gasId: 'nh3',
+    gasName: '氨气',
     validRadiusMeters: 38,
-    allowedSourceFacilityIds: ['t08', 'tw05'],
-    description: '允许位于硫化氢储罐和脱硫塔相关区域附近',
+    allowedSourceFacilityIds: ['t07', 't08'],
+    description: '允许位于液氨储罐和氨气相关工艺区域附近',
   },
   {
     gasId: 'ch4',

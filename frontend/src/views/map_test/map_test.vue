@@ -933,7 +933,7 @@
               </label>
               <label class="control-field" style="grid-column:1 / -1;">
                 <span>检测范围</span>
-                <input v-model.trim="manualSensorDraft.detectionRange" type="text" placeholder="CO / 可燃气体 / H2S / O2">
+                <input v-model.trim="manualSensorDraft.detectionRange" type="text" placeholder="CO / CH4 / NH3 / O2">
               </label>
               <label class="control-field" style="grid-column:1 / -1;">
                 <span>布点说明 / 备注（可选）</span>
@@ -1367,7 +1367,7 @@ function syncCarMarkers() {
     x: car.x,
     y: car.y,
     status: car.status,
-    gasLabel: ['', '甲烷', '硫化氢', '一氧化碳', '氧气'][car.id] || ''
+    gasLabel: ['', '甲烷', '氨气', '一氧化碳', '氧气'][car.id] || ''
   }))
 }
 
@@ -1496,7 +1496,7 @@ function navigateToCarDetail(carId) {
 function showCarInfo(car) {
   infoTitle.value = `小车 ${car.id}`
   infoSubtitle.value = { text: `● ${car.status === 'warning' ? '异常' : '正常'}`, color: car.status === 'warning' ? '#ef4444' : '#00e5a0' }
-  const gasName = ['', '可燃气体 (CH₄)', '有毒气体 (H₂S)', 'CO气体', '氧气 (O₂)'][car.id] || '--'
+  const gasName = ['', '甲烷 (CH₄)', '氨气 (NH₃)', 'CO气体', '氧气 (O₂)'][car.id] || '--'
   const threshold = carStore.gasThreshold[car.id]
   const thresholdText = threshold
     ? Array.isArray(threshold.threshold)
@@ -1683,7 +1683,7 @@ const leakSourceState = reactive({
 const MANUAL_SENSOR_DEFAULTS = Object.freeze({
   installationHeight: 1.5,
   effectiveRange: 20,
-  detectionRange: 'CO / 可燃气体 / H2S / O2',
+  detectionRange: 'CO / CH4 / NH3 / O2',
   installRemark: '',
 })
 const sensorPlacementState = reactive({
@@ -2483,9 +2483,9 @@ function computeSensorRisk(sensor, facility) {
   // ─────────────────────────────────────────────────────────
   // 表3 毒性气体校正系数β取值表 (原文):
   //   一氧化碳 CO = 2    氨 NH3 = 2
-  //   硫化氢 H2S = 5     氯 = 4
-  //   二氧化氮 = 10       氰化氢 = 10
-  //   碳酰氯 = 20         磷化氢 = 20
+  //   氯 = 4              二氧化氮 = 10
+  //   氰化氢 = 10         碳酰氯 = 20
+  //   磷化氢 = 20
   //
   // 表4 未在表3中列举的:
   //   W2 易燃气体 = 1.5
@@ -2493,9 +2493,7 @@ function computeSensorRisk(sensor, facility) {
   //   其他 = 1.0
   //
   let beta = 1.0
-  if (detectionRange.includes('h2s') || detectionRange.includes('硫化氢')) {
-    beta = 5   // GB 18218 表3: 硫化氢 β=5
-  } else if (detectionRange.includes('nh3') || detectionRange.includes('氨')) {
+  if (detectionRange.includes('nh3') || detectionRange.includes('氨')) {
     beta = 2   // GB 18218 表3: 氨 β=2
   } else if (detectionRange.includes('co') && !detectionRange.includes('co2')) {
     beta = 2   // GB 18218 表3: 一氧化碳 β=2
@@ -2539,7 +2537,7 @@ function computeSensorRisk(sensor, facility) {
   // 三、q/Q — 实际存在量与临界量的比值 (GB 18218 表1)
   // ─────────────────────────────────────────────────────────
   // 临界量Q (GB 18218 表1):
-  //   H2S=5t, NH3=10t, CO=30t, CH4=50t, C2H4=50t, O2=200t
+  //   NH3=10t, CO=30t, CH4=50t, C2H4=50t, O2=200t
   //
   // 传感器场景下, 利用设施hazardLevel映射有效q/Q:
   //   hazardLevel∈[0,1] → q/Q = 0.5 + hazardLevel × 9.5
@@ -2724,7 +2722,7 @@ async function executeBatchImport() {
   for (const item of batchImportPreview.value) {
     const nearestFacility = findNearestFacility(item.x, item.y)
     const tempSensor = {
-      detectionRange: 'CO/可燃气体/H2S/O2',
+      detectionRange: 'CO/CH4/NH3/O2',
       installationHeight: item.height || 1.5,
     }
     const { risk, priority } = computeSensorRisk(tempSensor, nearestFacility)
@@ -2734,7 +2732,7 @@ async function executeBatchImport() {
       y: item.y,
       installationHeight: item.height,
       effectiveRange: item.effectiveRange,
-      detectionRange: 'CO/可燃气体/H2S/O2',
+      detectionRange: 'CO/CH4/NH3/O2',
       installRemark: `批量导入: 相对坐标(${item.xRel},${item.yRel})`,
       priority,
       risk,
@@ -4097,7 +4095,7 @@ function syncDiffusionSourceSelection() {
 
 const carGasToDiffusionGasMap = {
   '甲烷': 1,
-  '硫化氢': 2,
+  '氨气': 2,
   '一氧化碳': 3,
   '氧气': 4
 }
@@ -4643,11 +4641,11 @@ function placeManualSensorAtPoint(point, sensorConfig = getNormalizedManualSenso
   const normalizedPoint = normalizeMapPoint(point)
   const nearestFacility = findNearestFacility(normalizedPoint.x, normalizedPoint.y)
   const tempSensor = {
-    detectionRange: sensorConfig.detectionRange || 'CO/可燃气体/H2S/O2',
+    detectionRange: sensorConfig.detectionRange || 'CO/CH4/NH3/O2',
     installationHeight: sensorConfig.installationHeight || 1.5,
   }
   const { risk: riskVal, priority } = computeSensorRisk(tempSensor, nearestFacility)
-  // 统一使用 gas 类型（多种气体传感器，支持 CO/可燃气体/H₂S/O₂）
+  // 统一使用 gas 类型（多种气体传感器，支持 CO/CH4/NH3/O2）
   // 使用工程命名生成传感器编号
   let areaType = 'tank', zone = 'tank_farm', isPumpArea = false
   for (const f of facilities) {
@@ -5253,7 +5251,7 @@ function generateBaseStandardLayout() {
         }
       }
     }
-    const { risk, priority } = computeSensorRisk({ detectionRange: 'CO/可燃气体/H2S/O2', installationHeight: 1.5 }, nearestFac)
+    const { risk, priority } = computeSensorRisk({ detectionRange: 'CO/CH4/NH3/O2', installationHeight: 1.5 }, nearestFac)
     layout.push({
       id: generateSensorCode(areaType, zone, isPumpArea),
       x, y, type: 'gas',

@@ -36,21 +36,15 @@
             </span>
           </div>
           <div class="card-data">
-            H₂S 硫化氢：
-            <span :class="isGasAlarm('h2s') ? 'text-red' : 'text-green'">
-              {{ gasData.h2s }}ppm
+            NH₃ 氨气：
+            <span :class="isGasAlarm('nh3') ? 'text-red' : 'text-green'">
+              {{ gasData.nh3 }}ppm
             </span>
           </div>
           <div class="card-data">
             CO 一氧化碳：
             <span :class="isGasAlarm('co') ? 'text-red' : 'text-green'">
               {{ gasData.co }}ppm
-            </span>
-          </div>
-          <div class="card-data">
-            VOC 挥发物：
-            <span :class="isGasAlarm('voc') ? 'text-red' : 'text-green'">
-              {{ gasData.voc }}ppm
             </span>
           </div>
           <div class="card-data">
@@ -203,9 +197,8 @@ const camera = ref({ name: '', url: '' })
 // 气体数据
 const gasData = ref({
   methane: '0.21',
-  h2s: '0.03',
+  nh3: '12',
   co: '0.05',
-  voc: '0.12',
   oxygen: '20.9'
 })
 
@@ -223,9 +216,8 @@ const tooltip = ref({ show: false, x: 0, y: 0, time: '', value: '' })
 // —————— 异常阈值 ——————
 const gasThreshold = {
   methane: 0.5,
-  h2s: 0.05,
-  co: 0.1,
-  voc: 0.2
+  nh3: 25,
+  co: 0.1
 }
 
 const isOxygenAlarm = computed(() => {
@@ -239,7 +231,7 @@ const isGasAlarm = (type) => {
 }
 
 const hasGasAlarm = computed(() => {
-  return isGasAlarm('methane') || isGasAlarm('h2s') || isGasAlarm('co') || isGasAlarm('voc') || isOxygenAlarm.value
+  return isGasAlarm('methane') || isGasAlarm('nh3') || isGasAlarm('co') || isOxygenAlarm.value
 })
 
 const hasAlarm = computed(() => hasGasAlarm.value)
@@ -248,9 +240,8 @@ const hasAlarm = computed(() => hasGasAlarm.value)
 const updateSafeValue = () => {
   let s = 100
   if (isGasAlarm('methane')) s -= 5
-  if (isGasAlarm('h2s')) s -= 10
+  if (isGasAlarm('nh3')) s -= 10
   if (isGasAlarm('co')) s -= 8
-  if (isGasAlarm('voc')) s -= 6
   if (isOxygenAlarm.value) s -= 12
   safeValue.value = Math.max(s, 0)
 }
@@ -310,9 +301,8 @@ const startAutoUpdate = () => {
   dataTimer = setInterval(() => {
     gasData.value = {
       methane: (0.18 + Math.random()*0.12).toFixed(2),
-      h2s: (0.02 + Math.random()*0.08).toFixed(2),
+      nh3: (10 + Math.random()*25).toFixed(1),
       co: (0.03 + Math.random()*0.12).toFixed(2),
-      voc: (0.1 + Math.random()*0.15).toFixed(2),
       oxygen: (19 + Math.random()*5).toFixed(1)
     }
     envData.value = {

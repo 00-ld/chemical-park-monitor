@@ -18,7 +18,7 @@ export const zones = [
 /**
  * 设施列表
  * hazardLevel: 物料危险等级（0~1），影响风险计算和传感器布点优先级
- *   - 液氨 / 硫化氢等高毒物质: 0.90~1.00
+ *   - 液氨等高毒物质: 0.90~1.00
  *   - 甲烷 / CO 等可燃有毒: 0.70~0.85
  *   - 一般化工原料: 0.40~0.60
  *   - 办公 / 辅助设施: 0.10~0.25
@@ -44,7 +44,7 @@ export const facilities = [
   { id:'t05', name:'T-05 碱液储罐', type:'tank', x:170, y:385, r:22, zone:'tank_farm', status:'正常', capacity:'2000m³', material:'NaOH', level:35, temp:26.8, desc:'液碱安全存储', hazardLevel:0.50 },
   { id:'t06', name:'T-06 中间体罐', type:'tank', x:240, y:380, r:20, zone:'tank_farm', status:'正常', capacity:'1500m³', material:'中间体A', level:60, temp:42.1, desc:'反应中间体暂存', hazardLevel:0.50 },
   { id:'t07', name:'T-07 氨气储罐', type:'tank', x:300, y:310, r:18, zone:'tank_farm', status:'正常', capacity:'500m³', material:'液氨', level:80, temp:-33.4, desc:'液氨安全储存与供应', hazardLevel:1.00 },
-  { id:'t08', name:'T-08 硫化氢储罐', type:'tank', x:300, y:380, r:25, zone:'tank_farm', status:'正常', capacity:'4000m³', material:'硫化氢', level:62, temp:18.5, desc:'硫化氢气体安全存储', hazardLevel:0.95 },
+  { id:'t08', name:'T-08 氨气备用储罐', type:'tank', x:300, y:380, r:25, zone:'tank_farm', status:'正常', capacity:'4000m³', material:'氨气', level:62, temp:18.5, desc:'氨气备用存储与应急调峰', hazardLevel:0.95 },
   { id:'tw01', name:'蒸馏塔 D-01', type:'tower', x:470, y:280, r:14, h:70, zone:'tower_area', status:'运行中', height:'45m', pressure:'2.1MPa', temp:185, desc:'常压蒸馏分离塔', hazardLevel:0.60 },
   { id:'tw02', name:'精馏塔 D-02', type:'tower', x:520, y:290, r:12, h:60, zone:'tower_area', status:'运行中', height:'38m', pressure:'1.8MPa', temp:165, desc:'精密精馏提纯塔', hazardLevel:0.60 },
   { id:'tw03', name:'吸收塔 A-01', type:'tower', x:570, y:280, r:13, h:55, zone:'tower_area', status:'运行中', height:'32m', pressure:'1.5MPa', temp:95, desc:'气体吸收净化塔', hazardLevel:0.70 },

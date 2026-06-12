@@ -365,7 +365,7 @@ const mapContainer = ref<HTMLElement | null>(null)
 const mapImgLoaded = ref(false)
 const carGasMap = ref<Record<number, string>>({
   1: '可燃气体 (CH₄)',
-  2: '有毒气体 (H₂S)',
+  2: '氨气 (NH₃)',
   3: 'CO气体',
   4: '氧气 (O₂)'
 })
@@ -376,14 +376,14 @@ const selectedCarId = ref<number | null>(null)
 
 const gasType = {
   1: '可燃气体',
-  2: '硫化氢 H₂S',
+  2: '氨气 NH₃',
   3: '一氧化碳 CO',
   4: '氧气 O₂'
 }
 
 const gasTypeMapping = {
   1: '甲烷',
-  2: '硫化氢',
+  2: '氨气',
   3: '一氧化碳',
   4: '氧气'
 }

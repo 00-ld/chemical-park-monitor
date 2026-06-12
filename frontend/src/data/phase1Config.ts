@@ -4,7 +4,7 @@ export const MAP_HEIGHT = 650
 export const GRID_SIZE = 20
 export const MAP_METERS_PER_UNIT = 0.5
 
-/* 气体类型配置数据 — 四气检测：CO / 可燃气体 / H2S / O2 */
+/* 气体类型配置数据 — 四气检测：CO / O2 / NH3 / CH4 */
 export const PHASE1_GASES = [
   {
     id: 'co',
@@ -18,15 +18,15 @@ export const PHASE1_GASES = [
     blockingThreshold: 75,
   },
   {
-    id: 'h2s',
-    name: '硫化氢',
-    color: '#ef4444',
-    densityRatio: 1.19,
-    molarMass: 34.08,
-    diffusionBias: 0.9,
-    warningThreshold: 8,
-    dangerThreshold: 20,
-    blockingThreshold: 24,
+    id: 'nh3',
+    name: '氨气',
+    color: '#a855f7',
+    densityRatio: 0.59,
+    molarMass: 17.03,
+    diffusionBias: 1.25,
+    warningThreshold: 25,
+    dangerThreshold: 50,
+    blockingThreshold: 75,
   },
   {
     id: 'ch4',

@@ -351,7 +351,7 @@
                 <span class="control-label">气体类型:</span>
                 <el-select v-model="selectedGasType" placeholder="选择气体类型" style="width: 180px" @change="onGasTypeChange">
                   <el-option label="甲烷(CH4)" value="CH4" />
-                  <el-option label="硫化氢(H2S)" value="H2S" />
+                  <el-option label="氨气(NH3)" value="NH3" />
                   <el-option label="一氧化碳(CO)" value="CO" />
                   <el-option label="氧气(O2)" value="O2" />
                 </el-select>
@@ -622,14 +622,14 @@ const currentTimeElapsed = computed(() => {
 
 const currentGasColor = computed(() => {
   const colors: Record<string, string> = {
-    CH4: '#E74C3C', H2S: '#9B59B6', CO: '#3498DB', O2: '#2ECC71'
+    CH4: '#E74C3C', NH3: '#9B59B6', CO: '#3498DB', O2: '#2ECC71'
   }
   return colors[selectedGasType.value] || '#E74C3C'
 })
 
 const carGasTypeMap: Record<number, string> = {
   1: 'CH4',
-  2: 'H2S',
+  2: 'NH3',
   3: 'CO',
   4: 'O2'
 }
@@ -731,12 +731,12 @@ const refreshMonitoringData = async () => {
 }
 
 const getGasType = (carId: number) => ({
-  1: '可燃气体(CH₄)', 2: '有毒气体(H₂S)',
+  1: '甲烷(CH₄)', 2: '氨气(NH₃)',
   3: '一氧化碳(CO)', 4: '氧气(O₂)'
 })[carId] || '未知'
 
 const getGasValue = (carId: number) => ({
-  1: '1.2 %LEL', 2: '5 ppm', 3: '15 ppm', 4: '20.9 %VOL'
+  1: '1.2 %LEL', 2: '30 ppm', 3: '15 ppm', 4: '20.9 %VOL'
 })[carId] || '0'
 
 const getAreaNameByCarId = (carId: number) => ({
@@ -753,7 +753,7 @@ const parseGasNumericValue = (value: string | number) => {
 }
 
 const getGasTypeCodeByCarId = (carId: number) => ({
-  1: 'CH4', 2: 'H2S', 3: 'CO', 4: 'O2'
+  1: 'CH4', 2: 'NH3', 3: 'CO', 4: 'O2'
 })[carId] || 'UNKNOWN'
 
 const pushWarningHistory = (car: CarData, reason = '自动监测') => {
@@ -789,7 +789,7 @@ const getRiskLevel = (item: HistoryItem) => {
   const value = parseGasNumericValue(item.gasValue)
   const code = getGasTypeCodeByCarId(Number(String(item.carId).replace(/\D/g, '')))
   if (code === 'CH4') return value >= 25 ? 'high' : 'low'
-  if (code === 'H2S') return value >= 10 ? 'high' : 'low'
+  if (code === 'NH3') return value >= 25 ? 'high' : 'low'
   if (code === 'CO') return value >= 50 ? 'high' : 'low'
   if (code === 'O2') return (value < 19.5 || value > 23.5) ? 'high' : 'low'
   return value > 100 ? 'high' : 'low'
@@ -1138,7 +1138,7 @@ const loadInitialData = async () => {
     }
     emergencyPlans.value = [
       { id: 1, name: '甲烷泄漏应急预案', type: 'gas', description: '针对甲烷气体泄漏的应急处置方案', level: 'high' },
-      { id: 2, name: '硫化氢泄漏应急预案', type: 'gas', description: '针对硫化氢气体泄漏的应急处置方案', level: 'critical' },
+      { id: 2, name: '氨气泄漏应急预案', type: 'gas', description: '针对氨气泄漏的应急处置方案', level: 'critical' },
       { id: 3, name: '火灾应急预案', type: 'fire', description: '针对火灾事故的应急处置方案', level: 'high' },
       { id: 4, name: '爆炸应急预案', type: 'explosion', description: '针对爆炸事故的应急处置方案', level: 'critical' },
       { id: 5, name: '自然灾害应急预案', type: 'natural', description: '针对自然灾害的应急处置方案', level: 'medium' }

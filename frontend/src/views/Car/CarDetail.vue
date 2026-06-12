@@ -177,7 +177,7 @@ const detailList = ref<DetailItem[]>([])
 
 const gasConfig: Record<number, GasConfig> = {
   1: { type: '可燃气体', unit: '%LEL', label: '可燃气体浓度', warning: 25 },
-  2: { type: 'H₂S', unit: 'ppm', label: 'H₂S浓度', warning: 10 },
+  2: { type: 'NH₃', unit: 'ppm', label: 'NH₃浓度', warning: 25 },
   3: { type: 'CO', unit: 'ppm', label: 'CO浓度', warning: 20 },
   4: { type: '氧气', unit: '%VOL', label: '氧气浓度', min: 19.5, max: 23.5 }
 }

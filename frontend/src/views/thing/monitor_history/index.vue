@@ -207,7 +207,7 @@
         <el-radio-group v-model="activeGasType" size="default" class="radio-group">
           <el-radio-button label="all">全部气体</el-radio-button>
           <el-radio-button label="ch4">甲烷(CH₄)</el-radio-button>
-          <el-radio-button label="h2s">硫化氢(H₂S)</el-radio-button>
+          <el-radio-button label="nh3">氨气(NH₃)</el-radio-button>
           <el-radio-button label="co">一氧化碳(CO)</el-radio-button>
           <el-radio-button label="o2">氧气(O₂)</el-radio-button>
         </el-radio-group>
@@ -235,9 +235,9 @@
               <div class="cell-content" style="white-space:pre-line">{{ scope.row.ch4 }}</div>
             </template>
           </el-table-column>
-          <el-table-column prop="h2s" label="硫化氢(H₂S)" align="center" min-width="220">
+          <el-table-column prop="nh3" label="氨气(NH₃)" align="center" min-width="220">
             <template #default="scope">
-              <div class="cell-content" style="white-space:pre-line">{{ scope.row.h2s }}</div>
+              <div class="cell-content" style="white-space:pre-line">{{ scope.row.nh3 }}</div>
             </template>
           </el-table-column>
           <el-table-column prop="co" label="一氧化碳(CO)" align="center" min-width="220">
@@ -275,10 +275,10 @@
           <el-table-column prop="response" label="应急响应措施" align="center" min-width="200" />
         </el-table>
 
-        <!-- 硫化氢单独表格 -->
+        <!-- 氨气单独表格 -->
         <el-table
-            v-else-if="activeGasType === 'h2s'"
-            :data="h2sLevelList"
+            v-else-if="activeGasType === 'nh3'"
+            :data="nh3LevelList"
             border
             stripe
             :header-cell-style="{background: '#f5f7fa', color: '#303133', fontWeight: '600'}"
@@ -555,7 +555,7 @@ const allGasLevelList = reactive([
     color: '红色',
     tagType: 'danger',
     ch4: '≥ 50% LEL\n(≈25000ppm)',
-    h2s: '≥ 100mg/m³\n(≥ 72ppm)',
+    nh3: '≥ 52mg/m³\n(≥ 75ppm)',
     co: '≥ 300mg/m³\n(≥ 262ppm)',
     o2: '< 16%VOL 或 >23.5%VOL',
     risk: '致命风险/爆炸极高风险',
@@ -566,7 +566,7 @@ const allGasLevelList = reactive([
     color: '橙色',
     tagType: 'warning',
     ch4: '25% ~ 50% LEL\n(12500-25000ppm)',
-    h2s: '50 ~ 100mg/m³\n(36 ~ 72ppm)',
+    nh3: '35 ~ 52mg/m³\n(50 ~ 75ppm)',
     co: '100 ~ 300mg/m³\n(87 ~ 262ppm)',
     o2: '16% ~ 19.5%VOL',
     risk: '中毒重伤/爆炸高风险',
@@ -577,7 +577,7 @@ const allGasLevelList = reactive([
     color: '黄色',
     tagType: 'primary',
     ch4: '10% ~ 25% LEL\n(5000-12500ppm)',
-    h2s: '20 ~ 50mg/m³\n(14 ~ 36ppm)',
+    nh3: '17 ~ 35mg/m³\n(25 ~ 50ppm)',
     co: '50 ~ 100mg/m³\n(43 ~ 87ppm)',
     o2: '19.5% ~ 20.9%VOL',
     risk: '刺激不适/爆炸预警',
@@ -588,7 +588,7 @@ const allGasLevelList = reactive([
     color: '灰色',
     tagType: 'info',
     ch4: '< 10% LEL\n(< 5000ppm)',
-    h2s: '≤ 10mg/m³\n(≤ 7ppm)',
+    nh3: '≤ 17mg/m³\n(≤ 25ppm)',
     co: '≤ 20mg/m³\n(≤ 17ppm)',
     o2: '20.9% ~ 23.5%VOL',
     risk: '无急性风险/可正常作业',
@@ -636,42 +636,42 @@ const ch4LevelList = reactive([
   }
 ])
 
-// 硫化氢(H₂S) - 剧毒气体
-const h2sLevelList = reactive([
+// 氨气(NH₃) - 刺激性有毒气体
+const nh3LevelList = reactive([
   {
     level: '极高危险',
     color: '红色',
     tagType: 'danger',
-    mg: '≥ 100mg/m³',
-    ppm: '≥ 72ppm',
-    risk: '可致昏迷、呼吸麻痹，甚至死亡',
-    response: '佩戴正压呼吸器/紧急撤离/专业救援'
+    mg: '≥ 52mg/m³',
+    ppm: '≥ 75ppm',
+    risk: '强烈刺激呼吸道和眼部，存在急性中毒风险',
+    response: '佩戴正压呼吸器/紧急撤离/专业处置'
   },
   {
     level: '危险',
     color: '橙色',
     tagType: 'warning',
-    mg: '50 ~ 100mg/m³',
-    ppm: '36 ~ 72ppm',
-    risk: '头痛、恶心，可能导致中毒',
+    mg: '35 ~ 52mg/m³',
+    ppm: '50 ~ 75ppm',
+    risk: '刺激明显，可能引起咳嗽、胸闷等症状',
     response: '立即通风/人员撤离/医学观察'
   },
   {
     level: '预警',
     color: '黄色',
     tagType: 'primary',
-    mg: '20 ~ 50mg/m³',
-    ppm: '14 ~ 36ppm',
-    risk: '刺激眼睛/呼吸道，需报警',
+    mg: '17 ~ 35mg/m³',
+    ppm: '25 ~ 50ppm',
+    risk: '刺激眼睛和呼吸道，需报警',
     response: '启动报警/加强通风/佩戴防护装备'
   },
   {
     level: '安全',
     color: '灰色',
     tagType: 'info',
-    mg: '≤ 10mg/m³',
-    ppm: '≤ 7ppm',
-    risk: '8小时加权平均容许浓度（PC-TWA）',
+    mg: '≤ 17mg/m³',
+    ppm: '≤ 25ppm',
+    risk: '低于预警阈值，可维持常规监测',
     response: '常规监测/定期巡检'
   }
 ])
@@ -769,7 +769,7 @@ const historyList = ref<HistoryItem[]>([])
 const formatGasType = (gasType: string) => {
   const gasMap: Record<string, string> = {
     'ch4': '甲烷(CH₄)',
-    'h2s': '硫化氢(H₂S)',
+    'nh3': '氨气(NH₃)',
     'co': '一氧化碳(CO)',
     'o2': '氧气(O₂)'
   }
@@ -795,8 +795,8 @@ const getRiskLevel = (item: HistoryItem | null | undefined) => {
   switch (gasType) {
     case '可燃气体':
       return value >= 50 ? 1 : value >= 20 ? 2 : value >= 10 ? 3 : 4
-    case 'H₂S':
-      return value >= 72 ? 1 : value >= 36 ? 2 : value >= 8 ? 3 : 4
+    case 'NH₃':
+      return value >= 75 ? 1 : value >= 50 ? 2 : value >= 25 ? 3 : 4
     case 'CO':
       return value >= 262 ? 1 : value >= 87 ? 2 : value >= 19 ? 3 : 4
     case '氧气':
