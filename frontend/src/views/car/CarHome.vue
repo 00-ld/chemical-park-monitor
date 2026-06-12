@@ -529,7 +529,8 @@ const initCharts = () => {
       const myChart = echarts.init(chartDom)
       const isWarning = getCarStatus(i) === 'warning'
 
-      const mockData = {
+      // 本地展示序列：用于小车总览趋势图，真实采样接入后应由后端返回。
+      const carGasTrendData = {
         1: { xAxis: ['60分钟前', '47分钟前', '34分钟前', '21分钟前', '8分钟前'], yAxis: [1.2, 1.5, 1.8, 1.3, 1.1] },
         2: { xAxis: ['60分钟前', '47分钟前', '34分钟前', '21分钟前', '8分钟前'], yAxis: [5, 8, 6, 7, 9] },
         3: { xAxis: ['60分钟前', '47分钟前', '34分钟前', '21分钟前', '8分钟前'], yAxis: [15, 22, 18, 25, 21] },
@@ -538,14 +539,14 @@ const initCharts = () => {
 
       const option = {
         title: { text: '' },
-        xAxis: { type: 'category', data: mockData.xAxis },
+        xAxis: { type: 'category', data: carGasTrendData.xAxis },
         yAxis: {
           type: 'value',
           name: i === 4 ? '浓度 (%VOL)' : '浓度 (ppm)',
           min: 0
         },
         series: [{
-          data: mockData.yAxis,
+          data: carGasTrendData.yAxis,
           type: 'line',
           smooth: true,
           itemStyle: {
