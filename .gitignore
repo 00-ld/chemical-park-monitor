@@ -17,6 +17,11 @@ python/.venv/
 *.pyo
 *.pt
 .venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
 
 # IDE
 .idea/
@@ -30,6 +35,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+.env.*.local
 *.log
 hs_err_pid*.log
 replay_pid*.log
@@ -37,9 +43,15 @@ replay_pid*.log
 # Project temp
 omc/
 .claude/
+.claude.md
 .omc/
 .codegraph/
+.codex-run-logs/
 chemical-park-monitor/
+*.tmp
+*.temp
+*.bak
+*.swp
 
 # Build artifacts (large)
 Manage/dist2/
