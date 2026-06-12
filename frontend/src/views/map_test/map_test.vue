@@ -1591,73 +1591,22 @@ const gases = ref([])
 const riskGrid = ref([])
 const weatherState = ref({windSpeed: 2, windDir: 135, temp: 28, rain: 0, humidity: 60, pressure: 1013, windSpeedKmh: 0, obsTime: ''})
 const weatherSource = ref('simulated') // 'real' | 'simulated'
-const lastWeatherFetch = ref(0)
 /** 当前无真实泄漏/扩散事件时，浓度数据由高斯烟羽模型仿真生成 */
 const isSimulatedConcentration = computed(() =>
   !diffusionFrames.value.length || !currentLeakSourcePoint.value
 )
 
 /**
- * 获取实时天气数据（和风天气 API v7）
- * 园区坐标：118.780E, 32.040N
- * 若 API Key 未配置或请求失败，自动回退到模拟天气
- *
- * ⚠️ 安全说明：
- * 当前方案在前端直连和风天气 API，适合开发演示。
- * 正式部署时务必通过后端代理转发请求（将 VITE_QWEATHER_KEY 移至后端配置），
- * 避免 API Key 在浏览器端暴露。
+ * 初始化气象数据。
+ * 真实天气必须经后端代理接入，第三方 API Key 不得放入前端环境变量或浏览器产物。
  */
-async function fetchRealtimeWeather() {
-  const apiKey = import.meta.env.VITE_QWEATHER_KEY
-  if (!apiKey) {
-    if (weatherSource.value !== 'simulated') {
-      weatherSource.value = 'simulated'
-      showToast('未配置 QWeather API Key，使用模拟天气数据', 'warn')
-    }
-    return
+function initializeWeatherData() {
+  weatherSource.value = 'simulated'
+  weatherState.value = {
+    ...weatherState.value,
+    windSpeedKmh: 0,
+    obsTime: ''
   }
-  try {
-    const resp = await fetch(
-      `https://devapi.qweather.com/v7/weather/now?location=118.78,32.04&key=${apiKey}`
-    )
-    const data = await resp.json()
-    if (data.code === '200') {
-      const now = data.now
-      // ── 风向 ──
-      // 和风天气 wind360 指示"风来的方向"，转换为模型使用的"风吹向"（+180°）
-      const windDirFrom = parseInt(now.wind360) || 135
-      const windDirTo = (windDirFrom + 180) % 360
-      // ── 风速单位转换 ──
-      // QWeather now.windSpeed 单位是 km/h，模型计算需使用 m/s（÷3.6）
-      const windSpeedKmh = parseFloat(now.windSpeed) || 0
-      const windSpeedMs = windSpeedKmh / 3.6
-      weatherState.value = {
-        windSpeed: Math.round(windSpeedMs * 10) / 10,    // m/s（参与扩散/监测范围/风险计算）
-        windSpeedKmh: Math.round(windSpeedKmh * 10) / 10, // km/h（仅 UI 展示）
-        windDir: windDirTo,
-        temp: parseFloat(now.temp) || 28,
-        rain: parseFloat(now.precip) || 0,
-        humidity: parseFloat(now.humidity) || 60,
-        pressure: parseFloat(now.pressure) || 1013,
-        obsTime: now.obsTime || ''
-      }
-      weatherSource.value = 'real'
-      lastWeatherFetch.value = Date.now()
-    } else {
-      throw new Error(`API error: ${data.code}`)
-    }
-  } catch (e) {
-    console.warn('QWeather fetch failed, fallback to simulated:', e.message)
-    weatherSource.value = 'simulated'
-  }
-}
-
-/**
- * 定时刷新真实天气（每 30 分钟）
- */
-function startWeatherAutoRefresh() {
-  fetchRealtimeWeather()
-  setInterval(() => fetchRealtimeWeather(), 30 * 60 * 1000)
 }
 const layoutResult = ref({ totalCost: 0, coverageRate: 0, riskCoverRate: 0, sensorCount: 0 })
 const batchImportText = ref('')
@@ -5592,8 +5541,8 @@ onMounted(() => {
   refreshCarData()
   carRefreshTimer.value = setInterval(refreshCarData, 10000)
 
-  // 初始化实时天气（每30分钟自动刷新）
-  startWeatherAutoRefresh()
+  // 初始化气象数据；真实天气后续通过后端代理接入
+  initializeWeatherData()
 
   setTimeout(() => {
     autoConfigFromCarParams()
