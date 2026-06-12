@@ -6,7 +6,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                    前端 (Vue3 + TypeScript)                   │
 │  frontend/                                                     │
-│  ├── views/        → 页面组件（screen, Car, YOLO 等）         │
+│  ├── views/        → 页面组件（screen, car, yolo, smart_map） │
 │  ├── api/          → 接口层（Java REST + Python 算法）        │
 │  ├── data/         → 静态数据（园区资产、坐标、气体配置）      │
 │  ├── store/        → Pinia 状态管理                           │
