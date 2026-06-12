@@ -40,7 +40,7 @@ defineOptions({
 })
 
 const DEFAULT_IPORTAL_URL =
-  'http://localhost:8190/iportal/apps/mapdashboard/v2/index.html?id=1329945243&action=view&mode=pc'
+  '/iportal/apps/mapdashboard/v2/index.html?id=1329945243&action=view&mode=pc'
 
 const frameKey = ref(0)
 const loading = ref(true)

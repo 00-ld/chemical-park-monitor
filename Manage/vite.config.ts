@@ -44,7 +44,7 @@ export default defineConfig(({ command, mode }) => {
         },
         [env.VITE_ALGORITHM_BASE_API || '/algorithm-api']: {
           //Python算法服务器地址
-          target: env.VITE_ALGORITHM_SERVE || 'http://localhost:8000',
+          target: env.VITE_ALGORITHM_SERVE,
           changeOrigin: true,
           rewrite: (path: string) => path.replace(/^\/algorithm-api/, ''),
         },

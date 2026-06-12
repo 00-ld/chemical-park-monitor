@@ -492,6 +492,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import algorithmClient from '@/api/algorithmClient'
 import {
   Warning, Clock, Sunny, Bell, Switch, Refresh, DataAnalysis,
   Location, Guide, Lock, Document, ChatDotRound, View, Promotion,
@@ -560,7 +561,9 @@ interface PathResult {
   success: boolean
 }
 
-const API_BASE = 'http://127.0.0.1:8000'
+const unwrapAlgorithmData = <T,>(response: { data?: T } | T): T => {
+  return ((response as { data?: T }).data ?? response) as T
+}
 
 const currentTime = ref('')
 const currentEmergencyLevel = ref<'normal' | 'warning' | 'danger'>('normal')
@@ -910,10 +913,7 @@ const calculateEscapePath = async () => {
 
     const startPoint = startPoints[selectedStartPoint.value] || startPoints.admin
 
-    const response = await fetch(`${API_BASE}/api/gas-path`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const response = await algorithmClient.post<any, { data?: PathResult }>('/api/gas-path', {
         leakCarId: selectedLeakPoint.value,
         leakPoint: { x: leakCar.x, y: leakCar.y },
         windAngle: windDirectionAngle.value,
@@ -924,9 +924,8 @@ const calculateEscapePath = async () => {
         gasType: selectedGasType.value,
         timeElapsed: 60.0
       })
-    })
 
-    const data = await response.json()
+    const data = unwrapAlgorithmData<PathResult>(response)
 
     if (data.success && data.escapePath) {
       currentPathResult.value = data
@@ -976,10 +975,7 @@ const startTimeSimulation = async () => {
   const leakCar = carList.value.find(c => c.id === selectedLeakPoint.value)!
 
   try {
-    const response = await fetch(`${API_BASE}/api/time-series`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const response = await algorithmClient.post<any, { data?: any }>('/api/time-series', {
         leakCarId: selectedLeakPoint.value,
         leakPoint: { x: leakCar.x, y: leakCar.y },
         windAngle: windDirectionAngle.value,
@@ -991,9 +987,8 @@ const startTimeSimulation = async () => {
         numSteps: 30,
         stepInterval: 5.0
       })
-    })
 
-    const data = await response.json()
+    const data = unwrapAlgorithmData<any>(response)
 
     if (data.success && data.frames) {
       timeSeriesFrames.value = data.frames

@@ -31,6 +31,8 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
       - ALGORITHM_API_KEY=${ALGORITHM_API_KEY}
+      - ANALYSIS_SERVICE_URL=${ANALYSIS_SERVICE_URL}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
     command: java -jar app.jar
     depends_on:
       mysql:
@@ -45,7 +47,7 @@ services:
     container_name: chemical-algorithm
     environment:
       - ALGORITHM_API_KEY=${ALGORITHM_API_KEY}
-      - ALGORITHM_CORS_ORIGINS=${ALGORITHM_CORS_ORIGINS:-http://localhost}
+      - ALGORITHM_CORS_ORIGINS=${ALGORITHM_CORS_ORIGINS:-http://www.cip.lab6119.xyz,https://www.cip.lab6119.xyz}
     ports:
       - "127.0.0.1:8000:8000"
     restart: always

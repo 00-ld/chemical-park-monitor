@@ -6,6 +6,7 @@ import com.at.pojo.InspectRecord;
 import com.at.pojo.Result;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -36,14 +37,15 @@ public class ImageAnalysisController {
     @Resource
     private InspectRecordMapper inspectRecordMapper;
 
+    @Value("${analysis.service.url:}")
+    private String analysisServiceUrl;
+
+    @Value("${algorithm.api-key:}")
+    private String algorithmApiKey;
+
     private static final long MAX_FILE_SIZE = 10L * 1024 * 1024;
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of("image/jpeg", "image/png", "image/jpg");
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png");
-    private static final String ALGORITHM_API_KEY = System.getenv("ALGORITHM_API_KEY");
-    private static final String ANALYSIS_SERVICE_URL = System.getenv().getOrDefault(
-            "ANALYSIS_SERVICE_URL",
-            "http://localhost:8001/api/analysis/person"
-    );
 
     @PostMapping("/person")
     public ResponseEntity<Result> analyzePerson(@RequestParam("file") MultipartFile file) {
@@ -93,14 +95,18 @@ public class ImageAnalysisController {
     }
 
     private String requestAlgorithmService(MultipartFile file, String filename) throws IOException {
+        if (analysisServiceUrl == null || analysisServiceUrl.isBlank()) {
+            throw new IllegalStateException("analysis.service.url is not configured");
+        }
+
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(10000);
         factory.setReadTimeout(60000);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        if (ALGORITHM_API_KEY != null && !ALGORITHM_API_KEY.isEmpty()) {
-            headers.set("X-API-Key", ALGORITHM_API_KEY);
+        if (algorithmApiKey != null && !algorithmApiKey.isEmpty()) {
+            headers.set("X-API-Key", algorithmApiKey);
         }
 
         ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
@@ -115,7 +121,7 @@ public class ImageAnalysisController {
 
         RestTemplate restTemplate = new RestTemplate(factory);
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
-        return restTemplate.postForObject(ANALYSIS_SERVICE_URL, requestEntity, String.class);
+        return restTemplate.postForObject(analysisServiceUrl, requestEntity, String.class);
     }
 
     private void saveInspectRecordIfNeeded(JSONObject analysisData) {

@@ -1,27 +1,29 @@
 package com.at.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
 public class CorsConfig {
 
+    @Value("${cors.allowed-origins:http://www.cip.lab6119.xyz,https://www.cip.lab6119.xyz}")
+    private String allowedOrigins;
+
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
-        // 只允许部署域名和 localhost（开发用）
-        config.setAllowedOrigins(List.of(
-                "http://localhost:5173",
-                "http://localhost:3000",
-                "http://localhost:8081"
-                // 生产环境在此添加实际域名，如：
-                // "https://your-domain.com"
-        ));
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
+        config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
