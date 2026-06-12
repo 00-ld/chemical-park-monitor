@@ -5,6 +5,7 @@
 ## 当前脚本
 
 - `audit_repository.py`：检查 Git 已跟踪文件是否包含旧目录、依赖缓存、构建产物、模型权重、真实环境文件等禁止提交内容。
+- `code_quality_audit.py`：检查已跟踪源码中的顶层重复定义、明显无意义命名和 Python 模块命名，作为“禁止无效、重复、无意义代码”死规则的可执行底线。
 - `sensor_audit.py`：传感器相关数据和布局方案审计辅助脚本。
 
 ## 维护规则
@@ -20,6 +21,7 @@
 
 ```bash
 python tools/audit_repository.py
+python tools/code_quality_audit.py
 python tools/sensor_audit.py
 ```
 
