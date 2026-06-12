@@ -34,6 +34,10 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      // Node 25 + esbuild 0.18 can crash during minification on Windows; keep deploy builds stable.
+      minify: false,
+    },
     //代理跨域
     server: {
       proxy: {

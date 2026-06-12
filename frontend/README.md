@@ -56,6 +56,8 @@ npm run typecheck
 npm run build:pro
 ```
 
+当前生产构建在 `vite.config.ts` 中关闭 minify，以避开 Windows + Node 25 + esbuild 0.18 的原生压缩崩溃；升级构建链路并验证后可重新评估压缩策略。
+
 ## 维护规则
 
 - 页面风格必须与现有深色工业监控风格保持一致，不得随意改成营销页或完全不同的视觉体系。
