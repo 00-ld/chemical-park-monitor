@@ -13,6 +13,7 @@ interface ImportMetaEnv {
   readonly VITE_ALGORITHM_BASE_API: string
   readonly VITE_ALGORITHM_SERVE: string
   readonly VITE_IPORTAL_DASHBOARD_URL: string
+  readonly VITE_QWEATHER_KEY: string
 }
 
 interface ImportMeta {
