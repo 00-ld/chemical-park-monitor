@@ -1,17 +1,16 @@
-"""Phase 1 Gaussian plume diffusion simulation.
+﻿"""第一阶段高斯烟羽扩散仿真。
 
-Implements a grid-based Gaussian plume dispersion model with obstacle,
-channel, and atmospheric stability effects. Designed for chemical plant
-gas leak scenario simulation.
+实现基于网格的高斯烟羽扩散模型，并考虑障碍物、通道和大气稳定度影响。
+用于化工厂气体泄漏场景仿真。
 
-Key features:
-    - Grid-based concentration computation with configurable resolution.
-    - Obstacle wake/shadow effects for buildings and equipment.
-    - Road channel guidance for wind flow.
-    - Multi-gas support with density and diffusion bias.
-    - Sensor reading simulation.
+主要特性：
+    - 基于网格的浓度计算，分辨率可配置。
+    - 建筑和设备的尾流/遮挡影响。
+    - 道路通道对风流的引导作用。
+    - 支持带密度和扩散偏置的多种气体。
+    - 传感器读数仿真。
 
-Typical usage:
+典型用法：
     result = create_phase1_diffusion_simulation(payload)
 """
 
@@ -24,10 +23,10 @@ import numpy as np
 
 from diffusion.gaussian_plume import (
     PlumeParams,
-    briggs_sigma_y,
-    briggs_sigma_z,
     build_emission_times,
     choose_emit_step,
+    corrected_dispersion_coefficients,
+    particle_rebound_alpha,
     resolve_environment,
     transient_ppm_field,
 )
@@ -40,15 +39,15 @@ MAP_METERS_PER_UNIT = 0.5
 
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
-    """Clamp a value between a minimum and maximum range.
+    """将数值限制在最小值和最大值之间。
 
-    Args:
-        value: The input value to clamp.
-        minimum: Lower bound of the range.
-        maximum: Upper bound of the range.
+    参数：
+        value: 需要限制的输入值。
+        minimum: 区间下限。
+        maximum: 区间上限。
 
-    Returns:
-        The clamped value within [minimum, maximum].
+    返回：
+        限制在 [minimum, maximum] 内的值。
     """
     return min(max(value, minimum), maximum)
 
@@ -101,13 +100,13 @@ PHASE1_GASES = [
 
 
 def get_gas_by_id(gas_id: Optional[str]) -> Dict:
-    """Look up gas properties by gas identifier.
+    """根据气体标识查找气体属性。
 
-    Args:
-        gas_id: Gas identifier string (e.g. 'h2s', 'nh3', 'co', 'toluene').
+    参数：
+        gas_id: 气体标识字符串，例如 'h2s'、'nh3'、'co'、'toluene'。
 
-    Returns:
-        Gas properties dictionary. Defaults to the first gas if not found.
+    返回：
+        气体属性字典；找不到时默认返回第一个气体。
     """
     for gas in PHASE1_GASES:
         if gas["id"] == gas_id:
@@ -116,20 +115,17 @@ def get_gas_by_id(gas_id: Optional[str]) -> Dict:
 
 
 def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
-    """Run a phase 1 Gaussian plume diffusion simulation.
+    """运行第一阶段高斯烟羽扩散仿真。
 
-    Computes concentration fields across a grid for each time step,
-    accounting for wind advection, atmospheric stability, obstacle effects,
-    channel guidance, and sensor readings.
+    为每个时间步计算网格浓度场，并考虑风平流、大气稳定度、障碍物影响、
+    通道引导和传感器读数。
 
-    Args:
-        payload: Simulation parameters including facilities, roads, gas type,
-            source location, wind, stability, release conditions, and
-            terrain configuration.
+    参数：
+        payload: 仿真参数，包括设施、道路、气体类型、源位置、风、稳定度、
+            释放条件和地形配置。
 
-    Returns:
-        Simulation result with gas info, source point, frame data, stats,
-        sensor series, and scenario metadata.
+    返回：
+        仿真结果，包含气体信息、源点、帧数据、统计量、传感器序列和场景元数据。
     """
     facilities = payload.get("facilities") or []
     roads = payload.get("roads") or []
@@ -146,9 +142,21 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
     ambient_temperature = parse_float(payload.get("ambientTemperature"), 25.0)
     humidity = parse_float(payload.get("humidity"), 55.0)
     stability_class = str(payload.get("stabilityClass") or "D").upper()
+    model_variant = str(payload.get("modelVariant") or payload.get("plumeModelVariant") or "classic").lower()
+    diffusion_correction_k = parse_float(payload.get("diffusionCorrectionK"), 1.0)
+    wind_reference_height = parse_float(payload.get("windReferenceHeight"), 10.0)
+    reflection_alpha_raw = payload.get("reflectionAlpha")
+    if reflection_alpha_raw is None:
+        reflection_alpha = particle_rebound_alpha(
+            parse_float(payload.get("settlingVelocity"), 0.0),
+            parse_float(payload.get("turbulentVelocityStd"), 1.0),
+            parse_float(payload.get("reboundEta"), 0.0),
+        ) if model_variant in ("improved", "modified", "corrected") else None
+    else:
+        reflection_alpha = clamp(parse_float(reflection_alpha_raw, 1.0), 0.0, 1.0)
     terrain_roughness = clamp(parse_float(payload.get("terrainRoughness"), 0.45), 0.05, 1.5)
     obstacle_influence_enabled = payload.get("obstacleInfluenceEnabled", True) is not False
-    # 钳制帧数到 [0, 600]，防止超大值耗尽资源（DoS）
+    # 钳制帧数到 [0, 600]，防止超大值耗尽资源（DoS）。
     frame_count = int(clamp(int(payload.get("frameCount") or 0), 0, 600))
     frame_step_sec = float(payload.get("frameStepSec") or 1)
     sensors = payload.get("sensors") or []
@@ -177,9 +185,8 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
     peak_affected_area = 0.0
     peak_danger_area = 0.0
 
-    # Physical plume parameters. ``sourceRate`` is interpreted as the gas
-    # emission rate Q in grams per second; ambient temperature/pressure set the
-    # mixing environment used for the kg/m3 -> ppm conversion.
+    # 物理烟羽参数。``sourceRate`` 解释为气体排放速率 Q（克/秒）；
+    # 环境温度/压力用于设置 kg/m3 -> ppm 换算所需的混合环境。
     ambient_temperature_k = ambient_temperature + 273.15
     ambient_pressure_pa = initial_pressure * 1.0e5 if initial_pressure > 5.0 else max(initial_pressure, 0.5) * 1.013e5
     params = PlumeParams(
@@ -192,13 +199,16 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
         molar_mass_g_mol=float(gas.get("molarMass", 28.97)),
         temperature_k=ambient_temperature_k,
         pressure_pa=ambient_pressure_pa,
+        model_variant=model_variant,
+        wind_reference_height_m=wind_reference_height,
+        diffusion_correction_k=diffusion_correction_k,
+        reflection_alpha=reflection_alpha,
     )
     emit_step_s = choose_emit_step(release_duration, frame_step_sec)
     emission_times = build_emission_times(release_duration, emit_step_s)
 
-    # Pre-compute the grid geometry once: cell centres in pixels, and the
-    # corresponding along/cross-wind coordinates in metres relative to the
-    # source. ``along`` is positive in the direction the wind blows toward.
+    # 预先计算一次网格几何：像素单位的单元中心，以及相对源点的沿风/横风
+    # 坐标（米）。``along`` 在风吹向的方向上为正。
     xs = np.arange(GRID_SIZE / 2, MAP_WIDTH, GRID_SIZE, dtype=float)
     ys = np.arange(GRID_SIZE / 2, MAP_HEIGHT, GRID_SIZE, dtype=float)
     grid_x, grid_y = np.meshgrid(xs, ys, indexing="xy")
@@ -207,14 +217,14 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
     along_m = (dx * cos_theta + dy * sin_theta) * MAP_METERS_PER_UNIT
     cross_m = (-dx * sin_theta + dy * cos_theta) * MAP_METERS_PER_UNIT
 
-    # Humidity slightly enhances near-ground depletion for soluble gases; kept as
-    # a small, explicit multiplicative attenuation rather than a hidden factor.
+    # 湿度会轻微增强可溶气体的近地损耗；这里保留为小幅、显式的乘性衰减，
+    # 避免变成隐藏因子。
     humidity_retention = clamp(1.0 - humidity * 0.0008, 0.85, 1.0)
 
     cell_area_m2 = GRID_SIZE * GRID_SIZE * MAP_METERS_PER_UNIT * MAP_METERS_PER_UNIT
     warning_threshold = float(gas["warningThreshold"])
     danger_threshold = float(gas["dangerThreshold"])
-    # Faint-but-visible floor for the diffuse halo (ppm).
+    # 扩散晕的淡可见下限（ppm）。
     visible_floor = max(warning_threshold * 0.02, 0.05)
 
     for frame_index in range(max(frame_count, 0)):
@@ -265,10 +275,8 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
                     wind_angle=angle,
                     channel_segments=channel_segments,
                 )
-                # Empirical near-field wake / channel attenuation applied on top
-                # of the physically computed Gaussian-puff concentration. These
-                # factors capture obstacle sheltering and street-channelling that
-                # a flat-terrain Gaussian model cannot represent on its own.
+                # 在物理高斯烟团浓度之上叠加经验近场尾流/通道衰减。这些因子
+                # 表示障碍遮蔽和道路通道效应，是平坦地形高斯模型自身无法表达的。
                 concentration = max(
                     0.0,
                     base_ppm
@@ -305,13 +313,20 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
                     }
                 )
 
-        # Plume visual envelope derived from the physical dispersion: the leading
-        # edge sits at the wind-advection distance, the half-widths from Briggs
-        # sigma at that distance (converted metres -> pixels, ~2 sigma envelope).
+        # 烟羽可视包络来自物理扩散：前缘位于风平流距离处，半宽取该距离处的
+        # Briggs sigma（米 -> 像素，约 2 sigma 包络）。
         advection_distance_m = params.effective_wind * time_sec
         advection_distance_px = advection_distance_m / MAP_METERS_PER_UNIT
-        sigma_y_lead = float(briggs_sigma_y(max(advection_distance_m, 1.0), stability_class, urban))
-        sigma_z_lead = float(briggs_sigma_z(max(advection_distance_m, 1.0), stability_class, urban))
+        sigma_y_raw, sigma_z_raw = corrected_dispersion_coefficients(
+            max(advection_distance_m, 1.0),
+            stability_class,
+            urban,
+            params.effective_wind,
+            diffusion_correction_k,
+            model_variant,
+        )
+        sigma_y_lead = float(sigma_y_raw)
+        sigma_z_lead = float(sigma_z_raw)
         major_axis_px = max(advection_distance_px * 0.5, sigma_y_lead / MAP_METERS_PER_UNIT * 2.0)
         minor_axis_px = max(sigma_y_lead / MAP_METERS_PER_UNIT * 2.0, GRID_SIZE)
 
@@ -368,6 +383,10 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
             "humidity": humidity,
             "stabilityClass": stability_class,
             "terrainRoughness": terrain_roughness,
+            "modelVariant": model_variant,
+            "windReferenceHeight": wind_reference_height,
+            "diffusionCorrectionK": diffusion_correction_k,
+            "reflectionAlpha": reflection_alpha,
             "obstacleInfluenceEnabled": obstacle_influence_enabled,
             "frameCount": frame_count,
             "frameStepSec": frame_step_sec,
@@ -376,14 +395,14 @@ def create_phase1_diffusion_simulation(payload: Dict) -> Dict:
 
 
 def find_source_facility(facilities: Sequence[Dict], source_facility_id: Optional[str]) -> Optional[Dict]:
-    """Find the source facility by ID or fall back to the first tank/tower.
+    """按 ID 查找源设施，找不到时退回到第一个储罐/塔器。
 
-    Args:
-        facilities: List of facility objects with 'id' and 'type' fields.
-        source_facility_id: Target facility ID, or None for fallback.
+    参数：
+        facilities: 带 'id' 和 'type' 字段的设施对象列表。
+        source_facility_id: 目标设施 ID；为 None 时使用兜底逻辑。
 
-    Returns:
-        Matching facility dictionary, or None if facilities list is empty.
+    返回：
+        匹配的设施字典；若设施列表为空则返回 None。
     """
     if source_facility_id:
         for facility in facilities:
@@ -396,13 +415,13 @@ def find_source_facility(facilities: Sequence[Dict], source_facility_id: Optiona
 
 
 def normalize_source_point(source_map_point: Optional[Dict]) -> Optional[Dict]:
-    """Normalize a source map point into a clean (x, y) dictionary.
+    """将源地图点规范化为干净的 (x, y) 字典。
 
-    Args:
-        source_map_point: Raw map point dict, or None.
+    参数：
+        source_map_point: 原始地图点字典，或 None。
 
-    Returns:
-        Normalized point dict with 'x' and 'y' floats, or None.
+    返回：
+        包含浮点 'x' 和 'y' 的规范化点字典，或 None。
     """
     if not source_map_point:
         return None
@@ -413,13 +432,13 @@ def normalize_source_point(source_map_point: Optional[Dict]) -> Optional[Dict]:
 
 
 def get_facility_center(facility: Optional[Dict]) -> Dict:
-    """Get the center point of a facility.
+    """获取设施中心点。
 
-    Args:
-        facility: Facility dict with type, position, and dimensions.
+    参数：
+        facility: 包含类型、位置和尺寸的设施字典。
 
-    Returns:
-        Dictionary with 'x' and 'y' coordinates of the center.
+    返回：
+        包含中心点 'x' 和 'y' 坐标的字典。
     """
     facility = facility or {}
     if facility.get("type") in ("tank", "tower"):
@@ -434,16 +453,15 @@ def get_facility_center(facility: Optional[Dict]) -> Dict:
 
 
 def build_hard_blockers(facilities: Sequence[Dict]) -> List[Dict]:
-    """Build hard blocking geometry from facilities (impassable areas).
+    """根据设施生成硬阻挡几何（不可穿透区域）。
 
-    Non-tank/tower facilities are expanded by 4 units and treated as
-    hard blockers that gas cannot penetrate.
+    非储罐/塔器设施会向外扩展 4 个单位，并作为气体不可穿透的硬阻挡物。
 
-    Args:
-        facilities: List of facility objects with position and dimensions.
+    参数：
+        facilities: 带位置和尺寸的设施对象列表。
 
-    Returns:
-        List of blocker dicts with 'id', 'x1', 'x2', 'y1', 'y2' bounds.
+    返回：
+        阻挡物字典列表，包含 'id'、'x1'、'x2'、'y1'、'y2' 边界。
     """
     blockers: List[Dict] = []
     for facility in facilities:
@@ -462,17 +480,16 @@ def build_hard_blockers(facilities: Sequence[Dict]) -> List[Dict]:
 
 
 def build_wake_obstacles(facilities: Sequence[Dict]) -> List[Dict]:
-    """Build wake-generating obstacle geometry from facilities.
+    """根据设施生成会产生尾流的障碍物几何。
 
-    Tank (circle) and tower/other (rect) obstacles with wake parameters
-    for flow disturbance modeling.
+    为储罐（圆形）以及塔器/其他设施（矩形）生成带尾流参数的障碍物，
+    用于模拟流场扰动。
 
-    Args:
-        facilities: List of facility objects with type and dimensions.
+    参数：
+        facilities: 带类型和尺寸的设施对象列表。
 
-    Returns:
-        List of obstacle dicts with shape, center, wake shift, shadow
-        strength, and drag parameters.
+    返回：
+        障碍物字典列表，包含形状、中心、尾流偏移、遮挡强度和阻力参数。
     """
     obstacles: List[Dict] = []
     for index, facility in enumerate(facilities):
@@ -530,16 +547,15 @@ def build_wake_obstacles(facilities: Sequence[Dict]) -> List[Dict]:
 
 
 def build_channel_segments(roads: Sequence[Dict]) -> List[Dict]:
-    """Build road channel segments for wind flow guidance.
+    """生成用于风流引导的道路通道段。
 
-    Converts road rectangles into oriented segments with width and
-    angle for channel effect computation.
+    将道路矩形转换为带宽度和角度的有向线段，用于计算通道效应。
 
-    Args:
-        roads: List of road objects with position and dimensions.
+    参数：
+        roads: 带位置和尺寸的道路对象列表。
 
-    Returns:
-        List of channel segment dicts with angle, center, length, width.
+    返回：
+        通道段字典列表，包含角度、中心、长度和宽度。
     """
     segments: List[Dict] = []
     for road in roads:
@@ -571,15 +587,15 @@ def build_channel_segments(roads: Sequence[Dict]) -> List[Dict]:
 
 
 def is_inside_hard_blocker(x: float, y: float, hard_blockers: Sequence[Dict]) -> bool:
-    """Check if a point is inside any hard blocker area.
+    """检查点是否位于任意硬阻挡区域内。
 
-    Args:
-        x: X-coordinate to check.
-        y: Y-coordinate to check.
-        hard_blockers: List of blocker bounds dictionaries.
+    参数：
+        x: 待检查的 X 坐标。
+        y: 待检查的 Y 坐标。
+        hard_blockers: 阻挡物边界字典列表。
 
-    Returns:
-        True if the point falls within any blocker bounds.
+    返回：
+        若点落在任一阻挡物边界内，则返回 True。
     """
     for blocker in hard_blockers:
         if blocker["x1"] <= x <= blocker["x2"] and blocker["y1"] <= y <= blocker["y2"]:
@@ -588,20 +604,19 @@ def is_inside_hard_blocker(x: float, y: float, hard_blockers: Sequence[Dict]) ->
 
 
 def evaluate_obstacle_effects(x: float, y: float, cos_theta: float, sin_theta: float, wake_obstacles: Sequence[Dict]) -> Dict:
-    """Evaluate obstacle drag, shadow, and wake effects at a point.
+    """评估某点处的障碍阻力、遮挡和尾流效应。
 
-    Computes how obstacles modify wind flow and gas concentration at the
-    given location based on obstacle geometry and wind direction.
+    根据障碍物几何和风向，计算障碍物如何改变该位置的风流和气体浓度。
 
-    Args:
-        x: X-coordinate of evaluation point.
-        y: Y-coordinate of evaluation point.
-        cos_theta: Cosine of wind direction angle.
-        sin_theta: Sine of wind direction angle.
-        wake_obstacles: List of obstacle geometry dictionaries.
+    参数：
+        x: 评估点 X 坐标。
+        y: 评估点 Y 坐标。
+        cos_theta: 风向角余弦。
+        sin_theta: 风向角正弦。
+        wake_obstacles: 障碍物几何字典列表。
 
-    Returns:
-        Dictionary with obstacleFactor, shadowFactor, and wakeOffset.
+    返回：
+        包含 obstacleFactor、shadowFactor 和 wakeOffset 的字典。
     """
     obstacle_factor = 1.0
     shadow_factor = 1.0
@@ -646,19 +661,18 @@ def evaluate_obstacle_effects(x: float, y: float, cos_theta: float, sin_theta: f
 
 
 def evaluate_channel_effects(x: float, y: float, wind_angle: float, channel_segments: Sequence[Dict]) -> Dict:
-    """Evaluate road channel guiding effects on wind and dispersion.
+    """评估道路通道对风和扩散的引导效应。
 
-    Computes how road channels channel and accelerate wind flow, affecting
-    along-wind and cross-wind dispersion scales.
+    计算道路通道如何约束并加速风流，从而影响沿风向和横风向扩散尺度。
 
-    Args:
-        x: X-coordinate of evaluation point.
-        y: Y-coordinate of evaluation point.
-        wind_angle: Wind direction in radians.
-        channel_segments: List of channel segment geometry dictionaries.
+    参数：
+        x: 评估点 X 坐标。
+        y: 评估点 Y 坐标。
+        wind_angle: 风向，单位弧度。
+        channel_segments: 通道段几何字典列表。
 
-    Returns:
-        Dictionary with channelFactor, alongScale, and crossScale.
+    返回：
+        包含 channelFactor、alongScale 和 crossScale 的字典。
     """
     best_channel_factor = 1.0
     best_along_scale = 1.0
@@ -685,15 +699,15 @@ def evaluate_channel_effects(x: float, y: float, wind_angle: float, channel_segm
 
 
 def get_obstacle_projection_extent(obstacle: Dict, cos_theta: float, sin_theta: float) -> tuple[float, float]:
-    """Get obstacle half extents projected along wind direction.
+    """获取障碍物沿风向投影后的半尺寸。
 
-    Args:
-        obstacle: Obstacle geometry dict with shape, radius/halfWidth/halfHeight.
-        cos_theta: Cosine of wind direction angle.
-        sin_theta: Sine of wind direction angle.
+    参数：
+        obstacle: 障碍物几何字典，包含形状、半径/半宽/半高。
+        cos_theta: 风向角余弦。
+        sin_theta: 风向角正弦。
 
-    Returns:
-        Tuple of (half_along, half_cross) projected extents.
+    返回：
+        投影尺寸元组 (half_along, half_cross)。
     """
     if obstacle["shape"] == "circle":
         radius = float(obstacle["radius"])
@@ -706,15 +720,15 @@ def get_obstacle_projection_extent(obstacle: Dict, cos_theta: float, sin_theta: 
 
 
 def distance_to_channel(x: float, y: float, segment: Dict) -> float:
-    """Compute minimum distance from a point to a channel segment.
+    """计算点到通道段的最小距离。
 
-    Args:
-        x: X-coordinate of the point.
-        y: Y-coordinate of the point.
-        segment: Channel segment dict with center, length, and angle.
+    参数：
+        x: 点的 X 坐标。
+        y: 点的 Y 坐标。
+        segment: 包含中心、长度和角度的通道段字典。
 
-    Returns:
-        Minimum Euclidean distance to the segment.
+    返回：
+        到通道段的最小欧氏距离。
     """
     local_x = x - float(segment["centerX"])
     local_y = y - float(segment["centerY"])
@@ -726,30 +740,30 @@ def distance_to_channel(x: float, y: float, segment: Dict) -> float:
 
 
 def initialize_sensor_series(sensors: Sequence[Dict]) -> List[Dict]:
-    """Initialize empty sensor series tracking structures.
+    """初始化空的传感器序列跟踪结构。
 
-    Args:
-        sensors: List of sensor objects with 'id' fields.
+    参数：
+        sensors: 带 'id' 字段的传感器对象列表。
 
-    Returns:
-        List of sensor series dicts with sensorId and empty series list.
+    返回：
+        传感器序列字典列表，包含 sensorId 和空 series 列表。
     """
     return [{"sensorId": sensor.get("id", ""), "series": []} for sensor in sensors]
 
 
 def build_frame_sensor_readings(sensors: Sequence[Dict], cells: Sequence[Dict], frame_index: int, time_sec: float) -> List[Dict]:
-    """Build sensor readings for a single frame.
+    """构建单帧传感器读数。
 
-    Queries cell concentrations at each sensor's location.
+    查询每个传感器位置对应的单元浓度。
 
-    Args:
-        sensors: List of sensor objects with position data.
-        cells: List of cell concentration data for this frame.
-        frame_index: Current frame index.
-        time_sec: Current time in seconds.
+    参数：
+        sensors: 带位置数据的传感器对象列表。
+        cells: 当前帧的单元浓度数据列表。
+        frame_index: 当前帧索引。
+        time_sec: 当前时间，单位秒。
 
-    Returns:
-        List of sensor reading dicts with concentration values.
+    返回：
+        带浓度值的传感器读数字典列表。
     """
     readings = []
     for sensor in sensors:
@@ -769,11 +783,11 @@ def build_frame_sensor_readings(sensors: Sequence[Dict], cells: Sequence[Dict], 
 
 
 def append_sensor_series(sensor_series: List[Dict], frame_sensor_readings: Sequence[Dict]) -> None:
-    """Append frame readings to sensor series buckets.
+    """将帧读数追加到传感器序列桶中。
 
-    Args:
-        sensor_series: Mutable list of sensor series dicts to update.
-        frame_sensor_readings: Readings from the current frame.
+    参数：
+        sensor_series: 要更新的可变传感器序列字典列表。
+        frame_sensor_readings: 当前帧读数。
     """
     bucket_map = {item["sensorId"]: item for item in sensor_series}
     for reading in frame_sensor_readings:
@@ -790,17 +804,17 @@ def append_sensor_series(sensor_series: List[Dict], frame_sensor_readings: Seque
 
 
 def get_cell_concentration_at_point(cells: Sequence[Dict], x: float, y: float) -> float:
-    """Get the interpolated concentration at a point from cell data.
+    """根据单元数据获取某点处的插值浓度。
 
-    Finds the nearest cell and applies distance-based fade.
+    查找最近单元，并按距离应用衰减。
 
-    Args:
-        cells: List of cell dicts with 'x', 'y', 'size', and 'concentration'.
-        x: Target X-coordinate.
-        y: Target Y-coordinate.
+    参数：
+        cells: 单元字典列表，包含 'x'、'y'、'size' 和 'concentration'。
+        x: 目标 X 坐标。
+        y: 目标 Y 坐标。
 
-    Returns:
-        Interpolated concentration value, or 0.0 if no cells exist.
+    返回：
+        插值浓度值；若没有单元则返回 0.0。
     """
     if not cells:
         return 0.0
@@ -818,14 +832,14 @@ def get_cell_concentration_at_point(cells: Sequence[Dict], x: float, y: float) -
 
 
 def parse_float(value: object, default: float) -> float:
-    """Parse a float value from an object, returning default on failure.
+    """从对象解析浮点数，失败时返回默认值。
 
-    Args:
-        value: Input value to convert to float.
-        default: Fallback value if conversion fails.
+    参数：
+        value: 要转换为浮点数的输入值。
+        default: 转换失败时使用的兜底值。
 
-    Returns:
-        Parsed float or default value.
+    返回：
+        解析得到的浮点数，或默认值。
     """
     try:
         return float(value)

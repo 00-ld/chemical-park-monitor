@@ -1,31 +1,25 @@
-"""Engineering-grade Gaussian plume / puff dispersion physics.
+﻿"""工程级高斯烟羽 / 烟团扩散物理模型。
 
-Implements the canonical atmospheric dispersion model used for hazardous gas
-release assessment in chemical plants, with physically grounded components:
+实现化工装置危险气体泄漏评估中常用的经典大气扩散模型，并包含具备
+物理依据的组成部分：
 
-    - Briggs (1973) dispersion coefficients sigma_y / sigma_z as functions of
-      downwind distance (metres) and Pasquill stability class A-F, for both
-      open-country (rural) and built-up (urban) environments.
-    - Steady-state Gaussian plume with full ground reflection and elevated
-      source height.
-    - Gaussian puff superposition for finite-duration transient releases, which
-      converges to the analytic continuous plume in the small-time-step limit
-      and naturally reproduces both build-up and post-release dissipation.
-    - Power-law wind profile to translate a 10 m reference wind speed to the
-      release height.
-    - Mass concentration (kg/m3) to volume mixing ratio (ppm) conversion via the
-      ideal gas law, so warning / danger thresholds expressed in ppm carry real
-      physical meaning.
+    - Briggs (1973) 扩散系数 sigma_y / sigma_z：随下风距离（米）和
+      Pasquill A-F 稳定度变化，同时支持开阔地（乡村）和建成区（城市）。
+    - 带完整地面反射和抬升源高度的稳态高斯烟羽。
+    - 用多个高斯烟团叠加表示有限时长瞬态释放；当时间步足够小时会收敛到
+      连续烟羽解析解，并自然体现释放建立和停止后的消散过程。
+    - 用幂律风廓线把 10 m 参考风速换算到释放高度。
+    - 基于理想气体状态方程，将质量浓度（kg/m3）换算为体积分数（ppm），
+      让以 ppm 表示的预警 / 危险阈值具有真实物理含义。
 
-References:
+参考资料：
     - G. A. Briggs, "Diffusion estimation for small emissions" (1973).
     - D. B. Turner, "Workbook of Atmospheric Dispersion Estimates" (1970).
     - Atmospheric dispersion modeling, Wikipedia.
 
-All distances inside this module are in metres, time in seconds, mass in grams,
-and the emission rate in grams per second unless stated otherwise.
+除非另有说明，本模块内部距离单位为米，时间为秒，质量为克，排放速率为克/秒。
 
-Typical usage:
+典型用法：
     field = transient_ppm_field(along_m, cross_m, params)
 """
 
@@ -38,21 +32,19 @@ from typing import Dict, Tuple
 import numpy as np
 
 
-# Universal gas constant (J / mol / K) and standard atmospheric pressure (Pa).
+# 通用气体常数（J / mol / K）和标准大气压（Pa）。
 R_GAS = 8.314462618
 STANDARD_PRESSURE_PA = 101325.0
 
-# Lower bound on the effective transport wind speed (m/s). Avoids singular
-# concentrations under calm conditions; consistent with regulatory practice of
-# capping Gaussian models at low wind speeds.
+# 有效输运风速下限（m/s）。用于避免静风条件下浓度奇异；
+# 也符合监管实践中对低风速高斯模型进行限幅的做法。
 MIN_WIND_SPEED = 0.3
 
-# Lower bound on downwind travel distance (m) used when evaluating dispersion
-# coefficients, so sigma never collapses to zero at the source.
+# 计算扩散系数时使用的下风向传播距离下限（m），防止源点处 sigma 塌缩为 0。
 MIN_TRAVEL_DISTANCE = 1.0
 
-# Power-law wind-profile exponents by stability class (open country values,
-# Irwin 1979). Used to extrapolate the 10 m wind to the release height.
+# 按稳定度划分的幂律风廓线指数（开阔地取值，Irwin 1979）。
+# 用于把 10 m 风速外推到释放高度。
 WIND_PROFILE_EXPONENT = {
     "A": 0.07,
     "B": 0.07,
@@ -63,53 +55,64 @@ WIND_PROFILE_EXPONENT = {
 }
 
 VALID_STABILITY_CLASSES = ("A", "B", "C", "D", "E", "F")
+VALID_MODEL_VARIANTS = ("classic", "improved")
 
 
 def normalize_stability(stability_class: str) -> str:
-    """Normalise an arbitrary stability label to a valid Pasquill class.
+    """把任意稳定度标签规范化为有效的 Pasquill 类别。
 
-    Args:
-        stability_class: Raw stability label (case-insensitive).
+    参数：
+        stability_class: 原始稳定度标签（大小写不敏感）。
 
-    Returns:
-        One of 'A'..'F'; defaults to 'D' (neutral) when unrecognised.
+    返回：
+        'A'..'F' 中的一个；无法识别时默认返回 'D'（中性）。
     """
     label = str(stability_class or "D").strip().upper()
     return label if label in VALID_STABILITY_CLASSES else "D"
 
 
+def normalize_model_variant(model_variant: str | None) -> str:
+    """规范化烟羽模型变体。
+
+    ``classic`` 保留经典 Briggs/Pasquill 高斯烟羽。``improved`` 使用项目
+    演示中的风速、扩散和地面反射修正项。
+    """
+    label = str(model_variant or "classic").strip().lower()
+    return "improved" if label in ("improved", "modified", "corrected") else "classic"
+
+
 def briggs_sigma_y(distance_m: np.ndarray | float, stability_class: str, urban: bool) -> np.ndarray | float:
-    """Compute the crosswind dispersion coefficient sigma_y (Briggs, 1973).
+    """计算横风向扩散系数 sigma_y（Briggs, 1973）。
 
-    Args:
-        distance_m: Downwind distance(s) from the source, in metres.
-        stability_class: Pasquill stability class 'A'..'F'.
-        urban: True for built-up (urban) terrain, False for open country.
+    参数：
+        distance_m: 距离源的下风向距离，单位米，可为标量或数组。
+        stability_class: Pasquill 稳定度类别 'A'..'F'。
+        urban: True 表示建成区（城市）地形，False 表示开阔地。
 
-    Returns:
-        sigma_y in metres, matching the shape/type of ``distance_m``.
+    返回：
+        单位为米的 sigma_y，形状/类型与 ``distance_m`` 匹配。
     """
     x = np.maximum(distance_m, MIN_TRAVEL_DISTANCE)
     stab = normalize_stability(stability_class)
     if urban:
-        # Briggs urban coefficients (A-B / C / D / E-F groupings).
+        # Briggs 城市系数（A-B / C / D / E-F 分组）。
         a = {"A": 0.32, "B": 0.32, "C": 0.22, "D": 0.16, "E": 0.11, "F": 0.11}[stab]
         return a * x / np.sqrt(1.0 + 0.0004 * x)
-    # Briggs open-country coefficients.
+    # Briggs 开阔地系数。
     a = {"A": 0.22, "B": 0.16, "C": 0.11, "D": 0.08, "E": 0.06, "F": 0.04}[stab]
     return a * x / np.sqrt(1.0 + 0.0001 * x)
 
 
 def briggs_sigma_z(distance_m: np.ndarray | float, stability_class: str, urban: bool) -> np.ndarray | float:
-    """Compute the vertical dispersion coefficient sigma_z (Briggs, 1973).
+    """计算垂直扩散系数 sigma_z（Briggs, 1973）。
 
-    Args:
-        distance_m: Downwind distance(s) from the source, in metres.
-        stability_class: Pasquill stability class 'A'..'F'.
-        urban: True for built-up (urban) terrain, False for open country.
+    参数：
+        distance_m: 距离源的下风向距离，单位米，可为标量或数组。
+        stability_class: Pasquill 稳定度类别 'A'..'F'。
+        urban: True 表示建成区（城市）地形，False 表示开阔地。
 
-    Returns:
-        sigma_z in metres, matching the shape/type of ``distance_m``.
+    返回：
+        单位为米的 sigma_z，形状/类型与 ``distance_m`` 匹配。
     """
     x = np.maximum(distance_m, MIN_TRAVEL_DISTANCE)
     stab = normalize_stability(stability_class)
@@ -121,7 +124,7 @@ def briggs_sigma_z(distance_m: np.ndarray | float, stability_class: str, urban: 
         if stab == "D":
             return 0.14 * x / np.sqrt(1.0 + 0.0003 * x)
         return 0.08 * x / np.sqrt(1.0 + 0.0015 * x)
-    # Open country.
+    # 开阔地。
     if stab == "A":
         return 0.20 * x
     if stab == "B":
@@ -135,26 +138,91 @@ def briggs_sigma_z(distance_m: np.ndarray | float, stability_class: str, urban: 
     return 0.016 * x / np.sqrt(1.0 + 0.0003 * x)
 
 
-def wind_at_height(wind_speed_10m: float, release_height_m: float, stability_class: str) -> float:
-    """Translate a 10 m reference wind speed to the release height.
+def wind_at_height(
+    wind_speed_10m: float,
+    release_height_m: float,
+    stability_class: str,
+    reference_height_m: float = 10.0,
+) -> float:
+    """把 10 m 参考风速换算到释放高度。
 
-    Uses a power-law profile with stability-dependent exponent and applies a
-    lower bound so the transport speed never falls below ``MIN_WIND_SPEED``.
+    使用带稳定度相关指数的幂律风廓线，并设置下限，保证输运风速不会低于
+    ``MIN_WIND_SPEED``。
 
-    Args:
-        wind_speed_10m: Wind speed measured at the 10 m reference height (m/s).
-        release_height_m: Effective release height above ground (m).
-        stability_class: Pasquill stability class 'A'..'F'.
+    参数：
+        wind_speed_10m: 参考高度处测得的风速（m/s）。
+        release_height_m: 地面以上有效释放高度（m）。
+        stability_class: Pasquill 稳定度类别 'A'..'F'。
+        reference_height_m: 风速测量高度 Hg，单位米。
 
-    Returns:
-        Effective transport wind speed at the release height (m/s).
+    返回：
+        释放高度处的有效输运风速（m/s）。
     """
     stab = normalize_stability(stability_class)
     exponent = WIND_PROFILE_EXPONENT[stab]
     reference = max(float(wind_speed_10m), 0.0)
     height = max(float(release_height_m), 1.0)
-    speed = reference * (height / 10.0) ** exponent
+    reference_height = max(float(reference_height_m), 0.1)
+    speed = reference * (height / reference_height) ** exponent
     return max(speed, MIN_WIND_SPEED)
+
+
+def corrected_dispersion_coefficients(
+    distance_m: np.ndarray | float,
+    stability_class: str,
+    urban: bool,
+    wind_speed_at_height: float,
+    diffusion_correction_k: float = 1.0,
+    model_variant: str | None = "classic",
+) -> Tuple[np.ndarray | float, np.ndarray | float]:
+    """返回经典模型或改进模型对应的 sigma_y/sigma_z。
+
+    改进形式遵循演示公式：
+
+        sigma_y* = sigma_y * (1 + 0.38 K)
+        sigma_z* = sigma_z * (2.53 - 0.13 log10(Uh))
+                   * K**(0.35 - 0.03 log10(Uh))
+                   / (0.55 + 0.042 log10(Uh))
+
+    其中 K 是显式扩散修正系数，Uh 是释放高度处风速。K=1.0 是中性修正基线。
+    """
+    sigma_y = briggs_sigma_y(distance_m, stability_class, urban)
+    sigma_z = briggs_sigma_z(distance_m, stability_class, urban)
+    if normalize_model_variant(model_variant) == "classic":
+        return sigma_y, sigma_z
+
+    k = max(float(diffusion_correction_k), 1e-6)
+    log_wind = math.log10(max(float(wind_speed_at_height), MIN_WIND_SPEED))
+    sigma_y_star = sigma_y * (1.0 + 0.38 * k)
+    sigma_z_factor = (2.53 - 0.13 * log_wind) * (k ** (0.35 - 0.03 * log_wind)) / (
+        0.55 + 0.042 * log_wind
+    )
+    sigma_z_star = sigma_z * max(float(sigma_z_factor), 1e-6)
+    return sigma_y_star, sigma_z_star
+
+
+def particle_rebound_alpha(
+    settling_velocity_m_s: float = 0.0,
+    turbulent_velocity_std_m_s: float = 1.0,
+    rebound_eta: float = 0.0,
+) -> float:
+    """计算改进模型中的地面反射/回弹系数。
+
+    幻灯片公式中有一个作用于镜像源项的回弹修正 ``alpha``。截图里 ``/2``
+    前的符号不够清晰，因此这里将其显式暴露为 ``rebound_eta``：
+
+        alpha = (sqrt(1 - eta/2) + vc/sigma) /
+                (sqrt(1 + eta/2) + vc/sigma)
+
+    ``eta=0`` 时 alpha=1，对应完全地面反射。eta 增大或沉降/沉积效应增强时，
+    反射烟羽会减弱。为了用于物理浓度计算，结果会限制在 [0, 1]。
+    """
+    eta = min(max(float(rebound_eta), 0.0), 1.999999)
+    velocity_scale = max(float(turbulent_velocity_std_m_s), 1e-6)
+    velocity_ratio = max(float(settling_velocity_m_s), 0.0) / velocity_scale
+    numerator = math.sqrt(max(1.0 - eta / 2.0, 0.0)) + velocity_ratio
+    denominator = math.sqrt(1.0 + eta / 2.0) + velocity_ratio
+    return min(max(numerator / max(denominator, 1e-12), 0.0), 1.0)
 
 
 def mass_to_ppm(
@@ -163,20 +231,19 @@ def mass_to_ppm(
     temperature_k: float,
     pressure_pa: float = STANDARD_PRESSURE_PA,
 ) -> np.ndarray | float:
-    """Convert a mass concentration (g/m3) to a volume mixing ratio (ppm).
+    """将质量浓度（g/m3）换算为体积分数（ppm）。
 
-    Uses the ideal gas law: ppm_v = C * R * T / (M * P) * 1e6, where C is the
-    mass concentration, M the molar mass, T the absolute temperature and P the
-    ambient pressure.
+    使用理想气体状态方程：ppm_v = C * R * T / (M * P) * 1e6，其中 C 是
+    质量浓度，M 是摩尔质量，T 是绝对温度，P 是环境压力。
 
-    Args:
-        mass_conc_g_m3: Mass concentration in grams per cubic metre.
-        molar_mass_g_mol: Molar mass of the gas in grams per mole.
-        temperature_k: Ambient absolute temperature in kelvin.
-        pressure_pa: Ambient pressure in pascal (defaults to 1 atm).
+    参数：
+        mass_conc_g_m3: 质量浓度，单位克/立方米。
+        molar_mass_g_mol: 气体摩尔质量，单位克/摩尔。
+        temperature_k: 环境绝对温度，单位 K。
+        pressure_pa: 环境压力，单位 Pa（默认 1 atm）。
 
-    Returns:
-        Volume mixing ratio in parts per million (ppm), same shape as input.
+    返回：
+        体积分数 ppm，形状与输入相同。
     """
     molar = max(float(molar_mass_g_mol), 1e-6)
     temperature = max(float(temperature_k), 1.0)
@@ -193,29 +260,36 @@ def steady_plume_mass_conc(
     release_height_m: float,
     stability_class: str,
     urban: bool,
+    model_variant: str | None = "classic",
+    diffusion_correction_k: float = 1.0,
+    reflection_alpha: float | None = None,
 ) -> np.ndarray | float:
-    """Steady-state Gaussian plume mass concentration with ground reflection.
+    """带地面反射的稳态高斯烟羽质量浓度。
 
-    Implements the canonical equation:
+    实现经典公式：
 
         C = Q / (2*pi*u*sigma_y*sigma_z)
             * exp(-y^2 / (2*sigma_y^2))
             * [ exp(-(z-H)^2 / (2*sigma_z^2)) + exp(-(z+H)^2 / (2*sigma_z^2)) ]
 
-    Concentrations upwind of the source (downwind_m <= 0) are zero.
+    源点上风向（downwind_m <= 0）的浓度为零。
 
-    Args:
-        emission_rate_g_s: Continuous emission rate Q in grams per second.
-        wind_speed: Effective transport wind speed u at release height (m/s).
-        downwind_m: Downwind coordinate x relative to the source (m).
-        crosswind_m: Crosswind coordinate y relative to the plume axis (m).
-        height_m: Receptor height z above ground (m).
-        release_height_m: Effective source height H (m).
-        stability_class: Pasquill stability class 'A'..'F'.
-        urban: True for urban terrain, False for open country.
+    参数：
+        emission_rate_g_s: 连续排放速率 Q，单位克/秒。
+        wind_speed: 释放高度处有效输运风速 u（m/s）。
+        downwind_m: 相对源点的下风向坐标 x（m）。
+        crosswind_m: 相对烟羽轴线的横风向坐标 y（m）。
+        height_m: 受体离地高度 z（m）。
+        release_height_m: 有效源高度 H（m）。
+        stability_class: Pasquill 稳定度类别 'A'..'F'。
+        urban: True 表示城市地形，False 表示开阔地。
+        model_variant: 'classic' 或 'improved'。
+        diffusion_correction_k: 改进 sigma 修正中的 K 系数。
+        reflection_alpha: 地面回弹镜像源倍率。经典模式默认 1.0，
+            改进模式默认 ``particle_rebound_alpha()``。
 
-    Returns:
-        Mass concentration in grams per cubic metre, same shape as inputs.
+    返回：
+        质量浓度，单位克/立方米，形状与输入一致。
     """
     x = np.asarray(downwind_m, dtype=float)
     y = np.asarray(crosswind_m, dtype=float)
@@ -223,35 +297,56 @@ def steady_plume_mass_conc(
     u = max(float(wind_speed), MIN_WIND_SPEED)
     h = float(release_height_m)
 
-    sigma_y = np.asarray(briggs_sigma_y(x, stability_class, urban), dtype=float)
-    sigma_z = np.asarray(briggs_sigma_z(x, stability_class, urban), dtype=float)
+    sigma_y_raw, sigma_z_raw = corrected_dispersion_coefficients(
+        x,
+        stability_class,
+        urban,
+        u,
+        diffusion_correction_k,
+        model_variant,
+    )
+    sigma_y = np.asarray(sigma_y_raw, dtype=float)
+    sigma_z = np.asarray(sigma_z_raw, dtype=float)
     sigma_y = np.maximum(sigma_y, 1e-3)
     sigma_z = np.maximum(sigma_z, 1e-3)
+    if normalize_model_variant(model_variant) == "improved":
+        image_alpha = (
+            particle_rebound_alpha()
+            if reflection_alpha is None
+            else min(max(float(reflection_alpha), 0.0), 1.0)
+        )
+    else:
+        image_alpha = 1.0
 
     norm = emission_rate_g_s / (2.0 * math.pi * u * sigma_y * sigma_z)
     crosswind_term = np.exp(-(y * y) / (2.0 * sigma_y * sigma_y))
-    vertical_term = np.exp(-((z - h) ** 2) / (2.0 * sigma_z * sigma_z)) + np.exp(
+    vertical_term = np.exp(-((z - h) ** 2) / (2.0 * sigma_z * sigma_z)) + image_alpha * np.exp(
         -((z + h) ** 2) / (2.0 * sigma_z * sigma_z)
     )
     conc = norm * crosswind_term * vertical_term
-    # Upwind of the source there is no plume.
+    # 源点上风向没有烟羽。
     return np.where(x > 0.0, conc, 0.0)
 
 
 @dataclass
 class PlumeParams:
-    """Physical parameters for a dispersion computation.
+    """扩散计算所需的物理参数。
 
     Attributes:
-        emission_rate_g_s: Emission rate Q in grams per second.
-        wind_speed_10m: Reference wind speed at 10 m (m/s).
-        release_height_m: Effective source height H (m).
-        release_duration_s: Total release duration (s).
-        stability_class: Pasquill stability class 'A'..'F'.
-        urban: True for urban terrain, False for open country.
-        molar_mass_g_mol: Molar mass of the released gas (g/mol).
-        temperature_k: Ambient absolute temperature (K).
-        pressure_pa: Ambient pressure (Pa).
+        emission_rate_g_s: 排放速率 Q，单位克/秒。
+        wind_speed_10m: 10 m 参考风速（m/s）。
+        release_height_m: 有效源高度 H（m）。
+        release_duration_s: 总释放时长（s）。
+        stability_class: Pasquill 稳定度类别 'A'..'F'。
+        urban: True 表示城市地形，False 表示开阔地。
+        molar_mass_g_mol: 泄漏气体摩尔质量（g/mol）。
+        temperature_k: 环境绝对温度（K）。
+        pressure_pa: 环境压力（Pa）。
+        model_variant: 'classic' 表示经典 Briggs/Pasquill，'improved'
+            表示项目修正公式。
+        wind_reference_height_m: 风速测量高度 Hg，单位米。
+        diffusion_correction_k: 改进 sigma 项中的 K 系数。
+        reflection_alpha: 可选镜像源反射系数。
     """
 
     emission_rate_g_s: float
@@ -263,22 +358,31 @@ class PlumeParams:
     molar_mass_g_mol: float
     temperature_k: float
     pressure_pa: float = STANDARD_PRESSURE_PA
+    model_variant: str = "classic"
+    wind_reference_height_m: float = 10.0
+    diffusion_correction_k: float = 1.0
+    reflection_alpha: float | None = None
 
     @property
     def effective_wind(self) -> float:
-        """Effective transport wind speed at the release height (m/s)."""
-        return wind_at_height(self.wind_speed_10m, self.release_height_m, self.stability_class)
+        """释放高度处的有效输运风速（m/s）。"""
+        return wind_at_height(
+            self.wind_speed_10m,
+            self.release_height_m,
+            self.stability_class,
+            self.wind_reference_height_m,
+        )
 
 
 def build_emission_times(release_duration_s: float, emit_step_s: float) -> np.ndarray:
-    """Build the discrete puff emission times for a finite release.
+    """为有限时长释放生成离散烟团释放时刻。
 
-    Args:
-        release_duration_s: Total release duration in seconds.
-        emit_step_s: Spacing between successive puffs in seconds.
+    参数：
+        release_duration_s: 总释放时长，单位秒。
+        emit_step_s: 相邻烟团之间的时间间隔，单位秒。
 
-    Returns:
-        1-D array of emission start times in seconds.
+    返回：
+        一维数组，表示各烟团释放开始时刻（秒）。
     """
     duration = max(float(release_duration_s), 0.0)
     step = max(float(emit_step_s), 1e-3)
@@ -289,18 +393,18 @@ def build_emission_times(release_duration_s: float, emit_step_s: float) -> np.nd
 
 
 def choose_emit_step(release_duration_s: float, frame_step_s: float, max_puffs: int = 80) -> float:
-    """Choose a puff emission step that balances accuracy and cost.
+    """选择兼顾精度和计算成本的烟团释放步长。
 
-    The step is fine enough for puffs to overlap (good convergence to the
-    continuous plume) yet bounded so the puff count stays manageable.
+    步长需要足够细，让相邻烟团重叠（从而良好收敛到连续烟羽），同时也要
+    有上限约束，避免烟团数量失控。
 
-    Args:
-        release_duration_s: Total release duration in seconds.
-        frame_step_s: Animation frame step in seconds.
-        max_puffs: Upper bound on the number of emitted puffs.
+    参数：
+        release_duration_s: 总释放时长，单位秒。
+        frame_step_s: 动画帧步长，单位秒。
+        max_puffs: 释放烟团数量上限。
 
-    Returns:
-        Puff emission step in seconds.
+    返回：
+        烟团释放步长，单位秒。
     """
     duration = max(float(release_duration_s), 1.0)
     base = min(max(0.5, float(frame_step_s)), duration / 20.0 if duration > 20.0 else duration)
@@ -317,44 +421,59 @@ def transient_mass_conc_field(
     emit_step_s: float,
     receptor_height_m: float = 0.0,
 ) -> np.ndarray:
-    """Gaussian puff superposition mass-concentration field at a given time.
+    """给定时刻的高斯烟团叠加质量浓度场。
 
-    Each puff carries mass ``Q * emit_step`` and is advected downwind at the
-    effective wind speed; its spread is set by the Briggs coefficients evaluated
-    at the puff travel distance. Summing overlapping puffs reproduces the
-    continuous plume during release and its dissipation afterwards.
+    每个烟团携带质量 ``Q * emit_step``，并以有效风速向下风向平流；其扩散宽度
+    由烟团传播距离处的 Briggs 系数决定。叠加多个重叠烟团即可重现释放期间的
+    连续烟羽，以及释放停止后的消散过程。
 
-    Args:
-        downwind_m: 2-D array of downwind coordinates relative to source (m).
-        crosswind_m: 2-D array of crosswind coordinates relative to axis (m).
-        time_sec: Observation time since release start (s).
-        params: Physical plume parameters.
-        emission_times: Puff emission start times (s).
-        emit_step_s: Puff emission spacing (s); sets per-puff mass.
-        receptor_height_m: Receptor height above ground (m).
+    参数：
+        downwind_m: 相对源点的下风向坐标二维数组（m）。
+        crosswind_m: 相对轴线的横风向坐标二维数组（m）。
+        time_sec: 从释放开始计的观测时刻（s）。
+        params: 烟羽物理参数。
+        emission_times: 烟团释放开始时刻（s）。
+        emit_step_s: 烟团释放间隔（s），决定每个烟团质量。
+        receptor_height_m: 受体离地高度（m）。
 
-    Returns:
-        2-D mass-concentration field in grams per cubic metre.
+    返回：
+        二维质量浓度场，单位克/立方米。
     """
     u = params.effective_wind
     h = float(params.release_height_m)
     z = float(receptor_height_m)
     puff_mass = float(params.emission_rate_g_s) * float(emit_step_s)
     two_pi_15 = (2.0 * math.pi) ** 1.5
+    if normalize_model_variant(params.model_variant) == "improved":
+        image_alpha = (
+            particle_rebound_alpha()
+            if params.reflection_alpha is None
+            else min(max(float(params.reflection_alpha), 0.0), 1.0)
+        )
+    else:
+        image_alpha = 1.0
 
     total = np.zeros_like(downwind_m, dtype=float)
     active = emission_times[emission_times < time_sec]
     for emit_time in active:
         travel_time = time_sec - emit_time
         distance = max(u * travel_time, MIN_TRAVEL_DISTANCE)
-        sigma_h = float(briggs_sigma_y(distance, params.stability_class, params.urban))
-        sigma_v = float(briggs_sigma_z(distance, params.stability_class, params.urban))
+        sigma_h_raw, sigma_v_raw = corrected_dispersion_coefficients(
+            distance,
+            params.stability_class,
+            params.urban,
+            u,
+            params.diffusion_correction_k,
+            params.model_variant,
+        )
+        sigma_h = float(sigma_h_raw)
+        sigma_v = float(sigma_v_raw)
         sigma_h = max(sigma_h, 1e-3)
         sigma_v = max(sigma_v, 1e-3)
-        # Along-wind puff spread is taken equal to the horizontal spread.
+        # 沿风向烟团扩散近似取为与水平横向扩散相同。
         along = np.exp(-((downwind_m - distance) ** 2) / (2.0 * sigma_h * sigma_h))
         cross = np.exp(-(crosswind_m * crosswind_m) / (2.0 * sigma_h * sigma_h))
-        vertical = np.exp(-((z - h) ** 2) / (2.0 * sigma_v * sigma_v)) + np.exp(
+        vertical = np.exp(-((z - h) ** 2) / (2.0 * sigma_v * sigma_v)) + image_alpha * np.exp(
             -((z + h) ** 2) / (2.0 * sigma_v * sigma_v)
         )
         norm = puff_mass / (two_pi_15 * sigma_h * sigma_h * sigma_v)
@@ -371,19 +490,19 @@ def transient_ppm_field(
     emit_step_s: float,
     receptor_height_m: float = 0.0,
 ) -> np.ndarray:
-    """Puff-superposition concentration field converted to ppm.
+    """将烟团叠加浓度场换算为 ppm。
 
-    Args:
-        downwind_m: 2-D array of downwind coordinates relative to source (m).
-        crosswind_m: 2-D array of crosswind coordinates relative to axis (m).
-        time_sec: Observation time since release start (s).
-        params: Physical plume parameters.
-        emission_times: Puff emission start times (s).
-        emit_step_s: Puff emission spacing (s).
-        receptor_height_m: Receptor height above ground (m).
+    参数：
+        downwind_m: 相对源点的下风向坐标二维数组（m）。
+        crosswind_m: 相对轴线的横风向坐标二维数组（m）。
+        time_sec: 从释放开始计的观测时刻（s）。
+        params: 烟羽物理参数。
+        emission_times: 烟团释放开始时刻（s）。
+        emit_step_s: 烟团释放间隔（s）。
+        receptor_height_m: 受体离地高度（m）。
 
-    Returns:
-        2-D concentration field in ppm (volume mixing ratio).
+    返回：
+        二维浓度场，单位 ppm（体积分数）。
     """
     mass_field = transient_mass_conc_field(
         downwind_m,
@@ -407,58 +526,59 @@ def integrated_crosswind_mass_flux(
     y_samples: int = 801,
     z_samples: int = 801,
 ) -> float:
-    """Numerically integrate the plume mass flux across a downwind plane.
+    """数值积分某个下风向截面的烟羽质量通量。
 
-    For a non-reactive, conserved tracer the flux ``\\int\\int C * u dy dz`` over a
-    plane perpendicular to the wind must equal the emission rate Q. This helper
-    is used by the validation suite to verify mass conservation.
+    对于不反应、守恒的示踪物，垂直于风向的截面通量
+    ``\\int\\int C * u dy dz`` 必须等于排放速率 Q。验证套件使用该辅助函数
+    检查质量守恒。
 
-    Args:
-        emission_rate_g_s: Emission rate Q in grams per second.
-        wind_speed: Effective transport wind speed (m/s).
-        downwind_m: Downwind distance of the integration plane (m).
-        release_height_m: Effective source height H (m).
-        stability_class: Pasquill stability class 'A'..'F'.
-        urban: True for urban terrain, False for open country.
-        y_samples: Number of crosswind sample points.
-        z_samples: Number of vertical sample points.
+    参数：
+        emission_rate_g_s: 排放速率 Q，单位克/秒。
+        wind_speed: 有效输运风速（m/s）。
+        downwind_m: 积分截面的下风向距离（m）。
+        release_height_m: 有效源高度 H（m）。
+        stability_class: Pasquill 稳定度类别 'A'..'F'。
+        urban: True 表示城市地形，False 表示开阔地。
+        y_samples: 横风向采样点数。
+        z_samples: 垂直方向采样点数。
 
-    Returns:
-        Integrated mass flux in grams per second.
+    返回：
+        积分得到的质量通量，单位克/秒。
     """
+    if float(downwind_m) <= 0.0:
+        return 0.0
+
     sigma_y = float(briggs_sigma_y(downwind_m, stability_class, urban))
     sigma_z = float(briggs_sigma_z(downwind_m, stability_class, urban))
+    sigma_y = max(sigma_y, 1e-3)
+    sigma_z = max(sigma_z, 1e-3)
+    wind = max(float(wind_speed), MIN_WIND_SPEED)
+    h = float(release_height_m)
+
     y = np.linspace(-6.0 * sigma_y, 6.0 * sigma_y, y_samples)
-    z = np.linspace(0.0, 6.0 * sigma_z + release_height_m, z_samples)
-    yy, zz = np.meshgrid(y, z, indexing="ij")
-    xx = np.full_like(yy, downwind_m)
-    conc = steady_plume_mass_conc(
-        emission_rate_g_s,
-        wind_speed,
-        xx,
-        yy,
-        zz,
-        release_height_m,
-        stability_class,
-        urban,
+    z = np.linspace(0.0, 6.0 * sigma_z + h, z_samples)
+    crosswind_term = np.exp(-(y * y) / (2.0 * sigma_y * sigma_y))
+    vertical_term = np.exp(-((z - h) ** 2) / (2.0 * sigma_z * sigma_z)) + np.exp(
+        -((z + h) ** 2) / (2.0 * sigma_z * sigma_z)
     )
-    flux = np.trapezoid(np.trapezoid(conc, z, axis=1), y, axis=0)
-    return float(flux * max(float(wind_speed), MIN_WIND_SPEED))
+    y_integral = np.trapezoid(crosswind_term, y)
+    z_integral = np.trapezoid(vertical_term, z)
+    norm = emission_rate_g_s / (2.0 * math.pi * wind * sigma_y * sigma_z)
+    return float(norm * y_integral * z_integral * wind)
 
 
 def comparison_statistics(predicted: np.ndarray, observed: np.ndarray) -> Dict[str, float]:
-    """Compute standard model-evaluation statistics (FB, NMSE, FAC2).
+    """计算标准模型评估指标（FB、NMSE、FAC2）。
 
-    These are the metrics recommended for atmospheric dispersion model
-    validation (Chang & Hanna, 2004).
+    这些指标是大气扩散模型验证中推荐使用的指标（Chang & Hanna, 2004）。
 
-    Args:
-        predicted: Model-predicted concentrations.
-        observed: Reference/observed concentrations.
+    参数：
+        predicted: 模型预测浓度。
+        observed: 参考/观测浓度。
 
-    Returns:
-        Dict with 'FB' (fractional bias), 'NMSE' (normalised mean square
-        error) and 'FAC2' (fraction of predictions within a factor of two).
+    返回：
+        包含 'FB'（分数偏差）、'NMSE'（归一化均方误差）和
+        'FAC2'（预测值落在 2 倍因子内的比例）的字典。
     """
     pred = np.asarray(predicted, dtype=float)
     obs = np.asarray(observed, dtype=float)
@@ -467,22 +587,22 @@ def comparison_statistics(predicted: np.ndarray, observed: np.ndarray) -> Dict[s
     mean_obs = float(np.mean(obs))
     fb = 2.0 * (mean_obs - mean_pred) / (mean_obs + mean_pred + eps)
     nmse = float(np.mean((obs - pred) ** 2) / (mean_obs * mean_pred + eps))
+    both_zero = (np.abs(pred) <= eps) & (np.abs(obs) <= eps)
     ratio = pred / np.maximum(obs, eps)
-    fac2 = float(np.mean((ratio >= 0.5) & (ratio <= 2.0)))
+    fac2 = float(np.mean(both_zero | ((ratio >= 0.5) & (ratio <= 2.0))))
     return {"FB": fb, "NMSE": nmse, "FAC2": fac2}
 
 
 def resolve_environment(terrain_roughness: float) -> bool:
-    """Map a terrain-roughness value to a rural/urban dispersion regime.
+    """将地表粗糙度映射为乡村/城市扩散机制。
 
-    Chemical-park layouts with dense equipment behave closer to urban
-    (built-up) dispersion. A roughness at or above 0.4 selects the urban
-    Briggs coefficient set.
+    设备密集的化工园区更接近城市（建成区）扩散条件。粗糙度大于等于 0.4
+    时选用城市 Briggs 系数组。
 
-    Args:
-        terrain_roughness: Surface roughness indicator (dimensionless).
+    参数：
+        terrain_roughness: 地表粗糙度指标（无量纲）。
 
-    Returns:
-        True for the urban regime, False for open country.
+    返回：
+        True 表示城市机制，False 表示开阔地。
     """
     return float(terrain_roughness) >= 0.4
