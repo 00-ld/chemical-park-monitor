@@ -26,7 +26,6 @@ def _build_response(code: int, message: str, data: Any, ok: bool) -> Dict[str, A
         "ok": ok,
         "timestamp": int(time.time() * 1000),
         "requestId": str(uuid.uuid4()),
-        # Compatibility fields for existing algorithm callers.
         "success": ok,
         "error": None if ok else message,
     }

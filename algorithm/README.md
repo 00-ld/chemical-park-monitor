@@ -35,6 +35,8 @@ python -m uvicorn polo:app --host 127.0.0.1 --port 8001 --reload
 - `yolo11m.pt` 等模型权重不得提交到 GitHub。
 - `ALGORITHM_API_KEY`、数据库密码、第三方 API Key 必须通过环境变量或部署平台密钥注入。
 - 生产环境建议设置 `ALGORITHM_REQUIRE_AUTH=true`。
+- YOLO 服务默认读取当前工作目录下的 `yolo11m.pt`，生产环境应显式设置 `YOLO_MODEL_PATH` 指向服务器或容器内受控模型路径。
+- 可选 YOLO 运行参数：`YOLO_DEVICE`、`YOLO_IMAGE_SIZE`、`YOLO_CONFIDENCE`。这些参数必须记录在部署环境中，不得写死到业务代码里。
 
 ## 验证命令
 
