@@ -18,10 +18,13 @@
 
 ### 目录命名规范
 
-- 一级目录统一使用小写英文领域名，当前规范目录为 `frontend/`、`backend/`、`algorithm/`、`tests/`、`db/`、`deploy/`、`docs/`、`tools/`、`assets/`。
+- 一级目录统一使用小写英文领域名，当前规范目录为 `frontend/`、`backend/`、`algorithm/`、`twin/`、`db/`、`datasets/`、`models/`、`docs/`、`tests/`、`tools/`、`scripts/`、`docker/`、`deploy/`、`config/`、`uploads/`、`logs/`、`assets/`、`.github/`。
 - 禁止提交中文目录名、空格目录名、大小写混用目录名、个人临时目录名和旧工程目录名。
-- 历史目录名必须归并到规范目录：`Manage/` 归并到 `frontend/`，`Back/` 归并到 `backend/`，`algorithm_tests/` 归并到 `tests/`，`python/` 归并到 `algorithm/`。
+- 历史目录名必须归并到规范目录：`Manage/` 归并到 `frontend/`，`Back/` 归并到 `backend/`，`algorithm_tests/` 归并到 `tests/`，`python/` 归并到 `algorithm/`，`chemical-park-monitor/` 拆分归档到对应规范目录。
 - 二级目录按技术栈约定命名：Python 使用 `snake_case`，Java 包路径使用小写英文，Vue 组件目录使用清晰英文语义。
+- `uploads/` 与 `logs/` 只保留占位说明和忽略规则，真实上传文件、运行日志、生产日志不得提交。
+- `models/` 默认只提交说明、清单和轻量配置，模型权重文件不得提交。
+- `datasets/` 默认只提交来源说明、清单和小型可复现实验样本，大型原始数据应存放在外部受控位置。
 
 ### 文件结构
 

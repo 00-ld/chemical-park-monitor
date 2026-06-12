@@ -59,6 +59,14 @@ python/
 *.bak
 *.swp
 
+# Runtime data
+uploads/*
+!uploads/README.md
+!uploads/.gitignore
+logs/*
+!logs/README.md
+!logs/.gitignore
+
 # Build artifacts (large)
 frontend/dist2/
 
@@ -72,10 +80,17 @@ backend/src/main/resources/application-local.properties
 # ML models
 *.pt
 *.pth
+*.onnx
 yolo11m.pt
+models/*
+!models/README.md
 
 # Generated datasets (large binary)
 *.npy
+*.npz
+datasets/raw/
+datasets/external/
+datasets/processed/
 
 # Third-party reference docs (large, not source)
 化工园区设备文献/

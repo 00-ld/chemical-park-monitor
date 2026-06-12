@@ -53,17 +53,43 @@ RULES = [
     ),
 ]
 
+ALLOWED_TOP_LEVEL_DIRECTORIES = {
+    ".github",
+    "algorithm",
+    "assets",
+    "backend",
+    "config",
+    "datasets",
+    "db",
+    "deploy",
+    "docker",
+    "docs",
+    "frontend",
+    "logs",
+    "models",
+    "scripts",
+    "tests",
+    "tools",
+    "twin",
+    "uploads",
+}
+
+ALLOWED_TOP_LEVEL_FILES = {
+    ".gitignore",
+    "README.md",
+    "pyproject.toml",
+}
+
 
 def tracked_files(repo_root: Path) -> list[str]:
     result = subprocess.run(
-        ["git", "ls-files"],
+        ["git", "ls-files", "-z"],
         cwd=repo_root,
         check=True,
         capture_output=True,
-        text=True,
-        encoding="utf-8",
     )
-    return [line.strip().replace("\\", "/") for line in result.stdout.splitlines() if line.strip()]
+    paths = result.stdout.decode("utf-8", errors="replace").split("\0")
+    return [path.replace("\\", "/") for path in paths if path]
 
 
 def main() -> int:
@@ -71,6 +97,29 @@ def main() -> int:
     violations: list[tuple[str, Rule]] = []
 
     for path in tracked_files(repo_root):
+        top_level = path.split("/", 1)[0]
+        if "/" not in path and top_level not in ALLOWED_TOP_LEVEL_FILES:
+            violations.append(
+                (
+                    path,
+                    Rule(
+                        name="unexpected-top-level-file",
+                        pattern=re.compile(""),
+                        description="file is not allowed at repository root",
+                    ),
+                )
+            )
+        if "/" in path and top_level not in ALLOWED_TOP_LEVEL_DIRECTORIES:
+            violations.append(
+                (
+                    path,
+                    Rule(
+                        name="unexpected-top-level-directory",
+                        pattern=re.compile(""),
+                        description="directory is not listed in the root folder standard",
+                    ),
+                )
+            )
         for rule in RULES:
             if rule.pattern.search(path):
                 violations.append((path, rule))
