@@ -30,6 +30,28 @@ frontend/
   public/                     前端静态资源
 ```
 
+主要路由约束：
+
+| 路由 | 页面 | 职责 |
+| --- | --- | --- |
+| `/home` | `src/views/home/index.vue` | 首页态势总览，只做可视化与快捷入口 |
+| `/screen` | `src/views/screen/index.vue` | SuperMap iPortal 数字大屏入口 |
+| `/map_test` | `src/views/map_test/map_test.vue` | 智慧地图、扩散与溯源、二维/三维实验视图 |
+| `/thing/monitor_history` | `src/views/thing/monitor_history/index.vue` | 实时预警与监控数据记录 |
+| `/car/home` | `src/views/Car/CarHome.vue` | 阿克曼巡检小车总览 |
+| `/car/:id` | `src/views/Car/CarDetail.vue` | 小车详情 |
+| `/acl/role` | `src/views/acl/role/index.vue` | 管理员/角色管理 |
+| `/acl/employee` | `src/views/acl/employee/index.vue` | 员工与人员信息管理 |
+| `/yolo` | `src/views/YOLO/Home.vue` | YOLO11m 人员识别与厂区实时监测 |
+| `/404` | `src/views/404/index.vue` | 统一 404 页面 |
+
+目录命名约束：
+
+- 新增一级页面目录优先使用小写英文，例如 `home`、`screen`、`emergency`。
+- 历史目录 `Car/`、`YOLO/` 暂时保留，避免破坏现有路由；新增页面不要继续扩散大小写混用命名。
+- 不得新增中文目录、空格目录、测试副本目录或重复入口文件。
+- 页面私有说明文档可以放在对应页面目录下，例如 `src/views/home/README.md`。
+
 ## 运行命令
 
 安装依赖：
@@ -56,6 +78,15 @@ npm run typecheck
 npm run build:pro
 ```
 
+Windows PowerShell 如果提示 `npm.ps1` 被执行策略拦截，可以使用：
+
+```powershell
+npm.cmd install
+npm.cmd run dev
+npm.cmd run typecheck
+npm.cmd run build:pro
+```
+
 当前生产构建在 `vite.config.ts` 中关闭 minify，以避开 Windows + Node 25 + esbuild 0.18 的原生压缩崩溃；升级构建链路并验证后可重新评估压缩策略。
 
 ## 维护规则
@@ -64,6 +95,9 @@ npm run build:pro
 - 新增接口调用必须放入 `src/api/` 或统一请求封装，不得在页面中散落硬编码 URL。
 - 三维展示优先接入已建设的 SuperMap iPortal 数字大屏；Three.js/SuperMap 三维扩展应保持与 iPortal 数据接口兼容。
 - Canvas 和 ECharts 相关高频渲染逻辑应避免在组件中重复定义同义变量和重复函数。
+- 主页、数字园区、智慧地图、小车管理、监控数据管理、人员管理和 404 页面均应保持可访问。
+- 前端只能保存公开配置，不得在 `.env.*`、页面代码或构建产物中写入真实 API Key、token、数据库密码或用户密码。
+- 真实天气、地图、AI 和第三方服务密钥必须经后端或部署网关注入，不得由浏览器直连携带密钥访问。
 - `dist/`、`node_modules/`、临时截图、未压缩大文件和真实密钥不得提交到 GitHub。
 - 图片、视频和模型资源应先确认用途；无法说明来源、用途或授权的资源不得新增提交。
 
@@ -85,4 +119,16 @@ Husky hook 位于 `frontend/.husky/`。本项目使用 npm 和 `package-lock.jso
 
 ```bash
 npm run typecheck
+```
+
+从仓库根目录还应执行：
+
+```bash
+python tools/audit_repository.py
+```
+
+如修改了路由、构建配置、关键页面或依赖，应额外执行：
+
+```bash
+npm run build:pro
 ```
