@@ -167,6 +167,7 @@ http://www.cip.lab6119.xyz
 ```
 
 如果三维大屏无法加载，检查 `frontend/.env.production` 中的 `VITE_IPORTAL_DASHBOARD_URL` 和 Nginx/iPortal 代理配置。
+当前部署路线以 `frontend/src/views/screen/` 嵌入 SuperMap iPortal 数字大屏为准，不再维护旧的独立三维查看页。
 
 ## 8. HTTPS 建议
 
