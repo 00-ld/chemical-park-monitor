@@ -27,6 +27,11 @@ RULES = [
         description="old top-level directory name",
     ),
     Rule(
+        name="legacy-frontend-view-directory",
+        pattern=re.compile(r"^frontend/src/views/(Car|YOLO|map_test)/"),
+        description="old frontend view directory name",
+    ),
+    Rule(
         name="dependency-or-build-output",
         pattern=re.compile(r"(^|/)(node_modules|__pycache__|\.venv|target|dist|build)(/|$)"),
         description="dependency cache or build output",
