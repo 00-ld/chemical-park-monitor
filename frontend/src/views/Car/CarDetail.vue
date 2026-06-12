@@ -275,10 +275,6 @@ watch(
   { immediate: true }
 )
 
-watch(globalStatus, () => {
-  console.log(`小车${carId.value}全局状态更新为：${globalStatus.value}`)
-}, { immediate: true })
-
 onMounted(async () => {
   await carStore.fetchCarDataFromDB()
   getCarDetail()

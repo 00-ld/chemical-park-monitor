@@ -68,7 +68,6 @@ export const useCarStore = defineStore('car', {
           // 更新 carList（管理页）和 carStatusList（Home/Detail）
           this.carList = formatCarList
           this.carStatusList = formatCarList.map(car => ({ id: car.id, status: car.status }))
-          console.log('成功从数据库加载小车数据：', formatCarList)
         }
       } catch (error) {
         console.error('加载数据库数据失败，使用本地默认：', error)

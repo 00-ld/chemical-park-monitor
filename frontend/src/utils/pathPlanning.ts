@@ -326,7 +326,6 @@ export class PathPlanner {
     }
 
     this.network = this.networkAnalyzer.analyze(this.roads)
-    console.log(`图构建完成: ${this.graphNodes.size}个节点, ${this.segments.length}条边`)
   }
 
   private lineIntersection(x1: number, y1: number, x2: number, y2: number,
@@ -402,8 +401,6 @@ export class PathPlanner {
     const startKey = this.findNearestNodeKey(options.startPoint)
     const endKey = this.findNearestNodeKey(options.endPoint)
 
-    console.log(`路径搜索: ${startKey} -> ${endKey}`)
-
     const result = this.dijkstra(startKey, endKey, options.startPoint, options.endPoint)
 
     if (result.roadSegments.length === 0) {
@@ -411,7 +408,6 @@ export class PathPlanner {
       return this.createDirectPath(options.startPoint, options.endPoint)
     }
 
-    console.log(`路径找到: ${result.path.length}个点, ${result.roadSegments.length}个路段, 距离${result.distance.toFixed(1)}m`)
     return result
   }
 
@@ -454,7 +450,6 @@ export class PathPlanner {
       visited.add(current.nodeId)
 
       if (current.nodeId === endKey) {
-        console.log(`Dijkstra完成，迭代${iterations}次`)
         break
       }
 
