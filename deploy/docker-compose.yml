@@ -29,6 +29,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/chemical?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-docker}
       - JWT_SECRET=${JWT_SECRET}
       - ALGORITHM_API_KEY=${ALGORITHM_API_KEY}
       - ANALYSIS_SERVICE_URL=${ANALYSIS_SERVICE_URL}
@@ -42,8 +43,8 @@ services:
   # Python 算法服务
   algorithm:
     build:
-      context: ../chemical-park-monitor/python
-      dockerfile: ../../deploy/algorithm/Dockerfile
+      context: ../python
+      dockerfile: ../deploy/algorithm/Dockerfile
     container_name: chemical-algorithm
     environment:
       - ALGORITHM_API_KEY=${ALGORITHM_API_KEY}

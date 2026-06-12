@@ -1,143 +1,238 @@
-# 化工园区智能监测系统 - 部署指南
+# 部署指南
 
-## 架构
+本文说明如何把化工园区危险气体扩散与溯源系统部署到服务器，并挂载到 `www.cip.lab6119.xyz` 域名下。
 
+## 1. 部署架构
+
+```text
+Browser
+  -> Nginx :80
+       -> static frontend files from Manage/dist
+       -> /api/*           -> Java backend :8081
+       -> /algorithm-api/* -> Python algorithm service :8000
+  -> SuperMap iPortal dashboard through VITE_IPORTAL_DASHBOARD_URL
+
+Java backend -> MySQL :3306
+Nginx -> injects X-API-Key when calling Python algorithm service
 ```
-浏览器 → Nginx(80) → 前端(Vue 3)
-                    → /api/* → Java后端(8081)
-                    → /algorithm-api/* → Python算法(8000)
-         MySQL(3306) ← Java后端
-```
 
-## 一、购买阿里云服务器
+公网只需要开放 `80`、`443`（启用 HTTPS 后）和 `22`。MySQL 与 Python 算法服务默认绑定服务器回环地址或 Docker 内网，不直接暴露公网。
 
-1. 登录 [阿里云](https://www.aliyun.com/)
-2. 进入 **轻量应用服务器**（新人 99 元/年起）
-3. 选择：
-   - 地域：就近选择（如华东 1 杭州）
-   - 镜像：**Ubuntu 22.04** 或 **Debian 12**
-   - 规格：建议 **2核4G** 起步（Python + PyTorch 比较吃内存）
-4. 安全组开放端口：**80**、**22**（SSH）
-5. 记下公网 IP 和 root 密码
+## 2. 服务器准备
 
-## 二、连接服务器
+推荐环境：
 
-Windows 用户可以用 PowerShell 或 CMD：
+| 项 | 建议 |
+| --- | --- |
+| OS | Ubuntu 22.04 / Debian 12 |
+| CPU / RAM | 2 核 4 GB 起步 |
+| Disk | 40 GB 起步 |
+| Runtime | Docker + Docker Compose |
+| Domain | `www.cip.lab6119.xyz` 解析到服务器公网 IP |
+
+安装 Docker：
 
 ```bash
-ssh root@你的公网IP
-```
-
-## 三、安装 Docker
-
-```bash
-# 安装 Docker
 curl -fsSL https://get.docker.com | sh
-
-# 启动 Docker
-systemctl enable docker && systemctl start docker
-
-# 验证
+systemctl enable docker
+systemctl start docker
 docker --version
 docker compose version
 ```
 
-## 四、上传项目文件
+## 3. 本地构建产物
 
-在你的 Windows 电脑上，把 `deploy/` 目录和需要的文件上传到服务器：
-
-```bash
-# 方式1: 用 scp 上传（在 Windows 终端执行）
-scp -r C:/Users/colorful/Desktop/localhost/deploy root@你的公网IP:/opt/chemical-park
-scp -r C:/Users/colorful/Desktop/localhost/Manage/dist root@/opt/chemical-park/manage-dist
-scp C:/Users/colorful/Desktop/localhost/Back/target/chemical-backend-1.0.0.jar root@:/opt/chemical-park/deploy/backend/
-scp -r C:/Users/colorful/Desktop/localhost/chemical-park-monitor/python root@:/opt/chemical-park/algorithm
-```
-
-或者用 **WinSCP** 图形化工具拖拽上传。
-
-## 五、在服务器上调整目录结构
+在项目根目录执行：
 
 ```bash
-cd /opt/chemical-park
+# 前端
+cd Manage
+npm install
+npm run build:pro
 
-# 确认文件结构
-ls -la
-# 应该看到: deploy/  manage-dist/  algorithm/
+# Java 后端
+cd ../Back
+mvn clean package -DskipTests
 
-# 创建 backend jar 的位置
-cp deploy/backend/chemical-backend-1.0.0.jar deploy/backend/
-
-# 修改 docker-compose.yml 中的路径（如果需要）
+# 回到项目根目录
+cd ..
 ```
 
-## 六、启动服务
+构建完成后应存在：
+
+```text
+Manage/dist/
+Back/target/chemical-backend-1.0.0.jar
+```
+
+将后端 jar 放到部署目录：
+
+```powershell
+Copy-Item Back/target/chemical-backend-1.0.0.jar deploy/backend/chemical-backend-1.0.0.jar
+```
+
+Linux/macOS 可使用：
+
+```bash
+cp Back/target/chemical-backend-1.0.0.jar deploy/backend/chemical-backend-1.0.0.jar
+```
+
+## 4. 上传到服务器
+
+建议把整个仓库上传到服务器的统一目录，避免 `docker-compose.yml` 中的相对路径失效：
+
+```bash
+scp -r C:/Users/colorful/Desktop/localhost root@服务器IP:/opt/chemical-park
+```
+
+服务器上目录应类似：
+
+```text
+/opt/chemical-park/
+  Back/
+  Manage/
+  python/
+  deploy/
+    backend/chemical-backend-1.0.0.jar
+    docker-compose.yml
+```
+
+不要上传真实 `.env` 到 GitHub；服务器本地 `.env` 只保存在 `/opt/chemical-park/deploy/.env`。
+
+## 5. 配置环境变量
+
+在服务器上执行：
 
 ```bash
 cd /opt/chemical-park/deploy
+cp .env.example .env
+nano .env
+```
 
-# 构建并启动所有服务
+必须修改：
+
+```env
+MYSQL_ROOT_PASSWORD=replace_with_strong_password
+JWT_SECRET=replace_with_32_char_min_random_secret
+ALGORITHM_API_KEY=replace_with_random_algorithm_key
+ANALYSIS_SERVICE_URL=
+CORS_ALLOWED_ORIGINS=http://www.cip.lab6119.xyz,https://www.cip.lab6119.xyz
+ALGORITHM_CORS_ORIGINS=http://www.cip.lab6119.xyz,https://www.cip.lab6119.xyz
+```
+
+说明：
+
+- `MYSQL_ROOT_PASSWORD`、`JWT_SECRET`、`ALGORITHM_API_KEY` 必须使用强随机值。
+- `ANALYSIS_SERVICE_URL` 指向 YOLO/人员识别服务；如果暂未部署该服务可留空，相关接口会提示配置或服务异常。
+- 前端生产接口使用相对路径 `/api` 与 `/algorithm-api`，由 Nginx 统一代理。
+
+## 6. 启动服务
+
+```bash
+cd /opt/chemical-park/deploy
 docker compose up -d --build
-
-# 查看运行状态
 docker compose ps
-
-# 查看日志
-docker compose logs -f
 ```
 
-## 七、验证
+查看日志：
 
 ```bash
-# 检查各服务状态
-docker compose ps
-
-# 测试前端
-curl http://localhost/
-
-# 测试后端 API
-curl http://localhost/api/
-
-# 测试算法服务
-curl http://localhost/algorithm-api/
+docker compose logs -f nginx
+docker compose logs -f backend
+docker compose logs -f algorithm
+docker compose logs -f mysql
 ```
 
-浏览器打开 `http://你的公网IP` 即可访问。
+## 7. 验证访问
 
-## 八、常用维护命令
+服务器本机验证：
 
 ```bash
-# 查看日志
-docker compose logs -f backend     # Java 后端日志
-docker compose logs -f algorithm   # Python 算法日志
-docker compose logs -f nginx       # Nginx 日志
+curl http://127.0.0.1/
+curl http://127.0.0.1/api/
+curl http://127.0.0.1/algorithm-api/api/health
+```
+
+域名验证：
+
+```bash
+curl http://www.cip.lab6119.xyz/
+curl http://www.cip.lab6119.xyz/algorithm-api/api/health
+```
+
+浏览器访问：
+
+```text
+http://www.cip.lab6119.xyz
+```
+
+如果三维大屏无法加载，检查 `Manage/.env.production` 中的 `VITE_IPORTAL_DASHBOARD_URL` 和 Nginx/iPortal 代理配置。
+
+## 8. HTTPS 建议
+
+当前模板只监听 80 端口。生产环境建议增加 HTTPS：
+
+1. 域名 `www.cip.lab6119.xyz` 完成 DNS 解析。
+2. 使用 Certbot 或云厂商证书申请 TLS 证书。
+3. 在 `deploy/nginx/default.conf` 中增加 443 server 配置。
+4. 启用 HSTS 前先确认 HTTPS 可用，避免误锁域名访问。
+
+## 9. 更新与回滚
+
+更新代码：
+
+```bash
+cd /opt/chemical-park
+git pull origin main
+
+cd Manage
+npm install
+npm run build:pro
+
+cd ../Back
+mvn clean package -DskipTests
+cp target/chemical-backend-1.0.0.jar ../deploy/backend/chemical-backend-1.0.0.jar
+
+cd ../deploy
+docker compose up -d --build
+```
+
+回滚到某个提交：
+
+```bash
+cd /opt/chemical-park
+git log --oneline
+git checkout <commit>
+```
+
+重新构建并启动后即可回到该版本。项目开发阶段每个子目录改动都单独提交，方便按历史提交定位问题。
+
+## 10. 运维命令
+
+```bash
+# 查看容器
+docker compose ps
 
 # 重启单个服务
 docker compose restart backend
+docker compose restart algorithm
+docker compose restart nginx
 
-# 停止所有服务
+# 停止全部服务
 docker compose down
 
-# 重新构建并启动
+# 重新构建
 docker compose up -d --build
 
-# 进入容器调试
+# 进入容器排查
 docker exec -it chemical-backend bash
 docker exec -it chemical-algorithm bash
+docker exec -it chemical-mysql bash
 ```
 
-## 九、安全建议
+## 11. 禁止事项
 
-1. **修改数据库密码**: 编辑 `deploy/.env`，修改 `MYSQL_ROOT_PASSWORD`
-2. **配置防火墙**: 只开放 80 和 22 端口
-3. **后续加域名**: 购买域名后配置 DNS 解析到服务器 IP
-
-## 十、费用估算
-
-| 项目 | 费用 |
-|------|------|
-| 阿里云轻量服务器 2核4G | ~99-200 元/年（新人价） |
-| 域名（可选） | ~30-60 元/年 |
-| 流量 | 轻量服务器一般包含流量包 |
-
-总计约 **100-260 元/年**，非常经济。
+- 不要把真实 `.env`、数据库密码、JWT 密钥、算法 API Key、证书私钥提交到 GitHub。
+- 不要提交 `Manage/dist/`、`Back/target/`、`.venv/`、`node_modules/`、`__pycache__/`、`.npy`、模型权重或生产数据库备份。
+- 不要把桌面 `gas/` 中的视频工程、缓存、大型验证数据集整体复制进仓库。
+- 不要在前端代码里写死生产密钥或只适用于个人电脑的绝对路径。
