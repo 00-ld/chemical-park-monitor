@@ -116,6 +116,7 @@ MYSQL_ROOT_PASSWORD=replace_with_strong_password
 JWT_SECRET=replace_with_32_char_min_random_secret
 ALGORITHM_API_KEY=replace_with_random_algorithm_key
 ANALYSIS_SERVICE_URL=
+INSPECTION_DEFAULT_LOCATION=核心作业区 A7
 CORS_ALLOWED_ORIGINS=http://www.cip.lab6119.xyz,https://www.cip.lab6119.xyz
 ALGORITHM_CORS_ORIGINS=http://www.cip.lab6119.xyz,https://www.cip.lab6119.xyz
 ```
@@ -124,6 +125,7 @@ ALGORITHM_CORS_ORIGINS=http://www.cip.lab6119.xyz,https://www.cip.lab6119.xyz
 
 - `MYSQL_ROOT_PASSWORD`、`JWT_SECRET`、`ALGORITHM_API_KEY` 必须使用强随机值。
 - `ANALYSIS_SERVICE_URL` 指向 YOLO/人员识别服务；如果暂未部署该服务可留空，相关接口会提示配置或服务异常。
+- `INSPECTION_DEFAULT_LOCATION` 是图片识别巡检记录的默认区域名称，应按园区实际点位配置。
 - 前端生产接口使用相对路径 `/api` 与 `/algorithm-api`，由 Nginx 统一代理。
 
 ## 6. 启动服务
