@@ -33,6 +33,9 @@ analysis:
   service:
     url: ${ANALYSIS_SERVICE_URL:}
 
+inspection:
+  default-location: ${INSPECTION_DEFAULT_LOCATION:核心作业区 A7}
+
 algorithm:
   api-key: ${ALGORITHM_API_KEY:}
 

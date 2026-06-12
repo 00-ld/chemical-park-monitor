@@ -79,6 +79,7 @@ CREATE DATABASE chemical CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 - `ALGORITHM_API_KEY`
 - `ANALYSIS_SERVICE_URL`
 - `CORS_ALLOWED_ORIGINS`
+- `INSPECTION_DEFAULT_LOCATION`
 
 本地临时配置文件不得提交。需要新增配置时，应优先在 `application.yml` 中使用 `${ENV_NAME:default}` 形式。
 
@@ -114,6 +115,7 @@ CREATE DATABASE chemical CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 - `ALGORITHM_API_KEY` 用于 Java 后端或 Nginx 调用 Python 算法服务时写入 `X-API-Key`。
 - `ANALYSIS_SERVICE_URL` 指向 YOLO/人员识别服务；未配置时相关接口应失败提示，不得静默回退到个人电脑地址。
+- `INSPECTION_DEFAULT_LOCATION` 用于图片识别记录的默认巡检区域，生产环境应按园区实际区域配置。
 - Python 算法服务端口不直接暴露公网，生产环境由 Nginx 或 Docker 内网转发。
 - 算法返回结果进入业务库前，应记录模型版本、请求时间、数据来源和必要质量标记。
 

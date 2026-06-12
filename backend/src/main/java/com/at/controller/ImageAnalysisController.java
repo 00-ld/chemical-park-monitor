@@ -43,6 +43,9 @@ public class ImageAnalysisController {
     @Value("${algorithm.api-key:}")
     private String algorithmApiKey;
 
+    @Value("${inspection.default-location:核心作业区 A7}")
+    private String defaultInspectionLocation;
+
     private static final long MAX_FILE_SIZE = 10L * 1024 * 1024;
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of("image/jpeg", "image/png", "image/jpg");
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png");
@@ -72,6 +75,9 @@ public class ImageAnalysisController {
             saveInspectRecordIfNeeded(analysisData);
             log.info("人员分析请求完成, 文件名: {}", filename);
             return ResponseEntity.ok(Result.success(analysisData));
+        } catch (IllegalStateException exception) {
+            log.warn("人员识别服务未配置: {}", exception.getMessage());
+            return ResponseEntity.status(503).body(Result.error(503, "人员识别服务未配置"));
         } catch (IOException exception) {
             log.error("文件读取失败: {}", filename, exception);
             return ResponseEntity.status(500).body(Result.error(500, "文件读取失败"));
@@ -125,6 +131,9 @@ public class ImageAnalysisController {
     }
 
     private void saveInspectRecordIfNeeded(JSONObject analysisData) {
+        if (analysisData == null) {
+            return;
+        }
         if (!"success".equals(analysisData.getString("status"))) {
             return;
         }
@@ -134,7 +143,7 @@ public class ImageAnalysisController {
             InspectRecord record = new InspectRecord();
             record.setCreateTime(LocalDateTime.now());
             record.setPersonCount(personCount);
-            record.setLocation("核心作业区 A7");
+            record.setLocation(defaultInspectionLocation);
             record.setStatus(personCount != null && personCount > 5 ? "异常" : "正常");
             record.setImageBase64(analysisData.getString("image_base64"));
             record.setAnalysisTime(0);
