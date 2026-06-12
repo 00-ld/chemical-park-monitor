@@ -13,7 +13,7 @@
     "format": "prettier --write \"./**/*.{html,vue,ts,js,json,md}\"",
     "lint:eslint": "eslint src/**/*.{ts,vue} --cache --fix",
     "lint:style": "stylelint src/**/*.{css,scss,vue} --cache --fix",
-    "prepare": "husky install",
+    "prepare": "cd .. && husky install frontend/.husky",
     "commitlint": "commitlint --config commitlint.config.cjs -e -V",
     "build:test": "npm run typecheck && vite build --mode test",
     "build:pro": "npm run typecheck && vite build --mode production"
