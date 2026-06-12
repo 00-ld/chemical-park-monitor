@@ -1,11 +1,12 @@
 {
-  "name": "project",
+  "name": "chemical-park-monitor-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --open",
-    "build": "vue-tsc && vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "lint": "eslint src",
     "fix": "eslint src --fix",
@@ -14,8 +15,8 @@
     "lint:style": "stylelint src/**/*.{css,scss,vue} --cache --fix",
     "prepare": "husky install",
     "commitlint": "commitlint --config commitlint.config.cjs -e -V",
-    "build:test": "vue-tsc && vite build --mode test",
-    "build:pro": "vue-tsc && vite build --mode production"
+    "build:test": "npm run typecheck && vite build --mode test",
+    "build:pro": "npm run typecheck && vite build --mode production"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
