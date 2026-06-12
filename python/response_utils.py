@@ -1,23 +1,32 @@
-"""统一 API 响应格式工具函数。"""
+"""Unified API response helpers for the Python algorithm service."""
+
+from __future__ import annotations
+
+import time
+import uuid
+from typing import Any, Dict
 
 
-def success_response(data, code=200):
-    """返回成功响应。
-    Args:
-        data: 响应数据
-        code: 业务状态码（非 HTTP 状态码）
-    Returns:
-        统一格式的响应字典
-    """
-    return {"success": True, "data": data, "error": None, "code": code}
+def success_response(data: Any = None, code: int = 200, message: str = "成功") -> Dict[str, Any]:
+    """Build a successful response compatible with the project JSON envelope."""
+    return _build_response(code=code, message=message, data=data, ok=True)
 
 
-def error_response(message, code=500):
-    """返回错误响应。
-    Args:
-        message: 错误描述
-        code: 业务状态码（非 HTTP 状态码）
-    Returns:
-        统一格式的响应字典
-    """
-    return {"success": False, "data": None, "error": message, "code": code}
+def error_response(message: str, code: int = 500) -> Dict[str, Any]:
+    """Build an error response compatible with the project JSON envelope."""
+    return _build_response(code=code, message=message, data=None, ok=False)
+
+
+def _build_response(code: int, message: str, data: Any, ok: bool) -> Dict[str, Any]:
+    """Create the shared response body while preserving old algorithm fields."""
+    return {
+        "code": code,
+        "message": message,
+        "data": data,
+        "ok": ok,
+        "timestamp": int(time.time() * 1000),
+        "requestId": str(uuid.uuid4()),
+        # Compatibility fields for existing algorithm callers.
+        "success": ok,
+        "error": None if ok else message,
+    }

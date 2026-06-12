@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 import uvicorn
 
 from gasDiffusionAstar import (
@@ -82,8 +83,15 @@ async def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
 # ========== Global Exception Handler ==========
 
 
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    """Return HTTP errors with the same JSON envelope as business errors."""
+    message = str(exc.detail) if exc.detail else "请求失败"
+    return JSONResponse(status_code=exc.status_code, content=error_response(message, exc.status_code))
+
+
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception) -> Dict[str, Any]:
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle all uncaught exceptions with a uniform error response.
 
     FastAPI/Starlette standard HTTP exceptions (e.g. 404) are re-raised
@@ -97,10 +105,10 @@ async def global_exception_handler(request: Request, exc: Exception) -> Dict[str
         Error response dict with a generic message (no internal details).
     """
     if isinstance(exc, (HTTPException, StarletteHTTPException)):
-        raise exc
+        return await http_exception_handler(request, exc)
     # 仅在服务端日志记录完整堆栈，对外只返回通用提示，避免泄露内部信息
     logger.exception("未处理的算法服务异常: %s %s", request.method, request.url.path)
-    return error_response("算法服务内部错误")
+    return JSONResponse(status_code=500, content=error_response("算法服务内部错误"))
 
 
 # ========== 1. Gas Diffusion + Path Planning ==========
@@ -261,7 +269,7 @@ async def health_check() -> Dict[str, Any]:
     Returns:
         Dict with service status, version, and name.
     """
-    return {"status": "ok", "version": "3.0.0", "service": "chemical-algorithm"}
+    return success_response({"status": "ok", "version": "3.0.0", "service": "chemical-algorithm"})
 
 
 if __name__ == "__main__":
