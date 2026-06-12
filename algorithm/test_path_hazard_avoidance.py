@@ -2,7 +2,7 @@ import math
 import unittest
 from typing import Dict, List, Set, Tuple
 
-from gasDiffusionAstar import AStarPathPlanner, _edge_key
+from gas_diffusion_astar import AStarPathPlanner, _edge_key
 
 Point = Tuple[float, float]
 

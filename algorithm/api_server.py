@@ -22,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 import uvicorn
 
-from gasDiffusionAstar import (
+from gas_diffusion_astar import (
     calculate_gas_and_path,
     get_gas_types_info,
     simulate_time_series,

@@ -7,6 +7,7 @@
 - `api_server.py`：统一 FastAPI 算法服务入口，提供扩散、溯源、路径规划、健康检查等接口。
 - `polo.py`：YOLO11m 人员识别服务入口，用于小车摄像头图片识别，通常由 Java 后端通过 `ANALYSIS_SERVICE_URL` 内网调用。
 - `response_utils.py`：统一 JSON 响应封装工具。
+- `gas_diffusion_astar.py`：扩散模拟与路径规划组合能力，保留现有接口名以兼容算法服务调用。
 
 已删除旧入口 `apiServer.py` 和 PyInstaller `.spec` 文件。后续不得新增大小写混杂的重复入口文件，服务入口统一使用蛇形命名。
 
