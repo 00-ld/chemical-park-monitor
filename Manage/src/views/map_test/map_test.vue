@@ -1547,7 +1547,8 @@ const triggerYoloForCar = async (carId) => {
       formData.append('file', blob, `car_${carId}_capture.png`)
       try {
         const res = await fetch((import.meta.env.VITE_APP_BASE_API || '/api') + '/analysis/person', { method: 'POST', body: formData })
-        const data = await res.json()
+        const responseBody = await res.json()
+        const data = responseBody?.data || responseBody
         if (data.status === 'success') {
           yoloResult.value = { carId, count: data.count, imageBase64: data.image_base64, timestamp: Date.now() }
           showToast(`小车 ${carId} 检测到 ${data.count} 人`, 'success')

@@ -168,7 +168,8 @@ let lineChart: echarts.ECharts | null = null
 // 加载数据库全部日志
 const loadLogList = async () => {
   const res = await axios.get((import.meta.env.VITE_APP_BASE_API || '/api') + "/analysis/list")
-  detectionLogs.value = res.data.map((item: { id: number; createTime: string; location: string; personCount: number }) => {
+  const logItems = Array.isArray(res.data?.data) ? res.data.data : res.data
+  detectionLogs.value = logItems.map((item: { id: number; createTime: string; location: string; personCount: number }) => {
     return {
       id: item.id,
       time: new Date(item.createTime).toLocaleTimeString(),
@@ -180,7 +181,7 @@ const loadLogList = async () => {
 
 // 删除单条日志
 const delLog = async (id: number) => {
-  await axios.delete(`(import.meta.env.VITE_APP_BASE_API || '/api')/analysis/delete/${id}`)
+  await axios.delete(`${import.meta.env.VITE_APP_BASE_API || '/api'}/analysis/delete/${id}`)
   await loadLogList()
   ElMessage.success("删除成功")
 }
@@ -259,12 +260,13 @@ const analyzeImage = async (file: File) => {
   const start = Date.now()
   try {
     const res = await axios.post(`${import.meta.env.VITE_APP_BASE_API || '/api'}/analysis/person`, formData)
-    if (res.data.status === 'success') {
-      resultImage.value = res.data.image_base64
+    const analysisData = res.data?.data || res.data
+    if (analysisData.status === 'success') {
+      resultImage.value = analysisData.image_base64
       analysisTime.value = Date.now() - start
-      currentCount.value = res.data.count
+      currentCount.value = analysisData.count
 
-      gaugeChart?.setOption({ series: [{ data: [{ value: res.data.count }] }] })
+      gaugeChart?.setOption({ series: [{ data: [{ value: analysisData.count }] }] })
       // 分析完成 重新拉取数据库列表
       await loadLogList()
     }
