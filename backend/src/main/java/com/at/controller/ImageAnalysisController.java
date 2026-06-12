@@ -48,7 +48,7 @@ public class ImageAnalysisController {
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png");
 
     @PostMapping("/person")
-    public ResponseEntity<Result> analyzePerson(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<Result<?>> analyzePerson(@RequestParam("file") MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().body(Result.error(400, "未上传文件"));
         }
@@ -82,13 +82,13 @@ public class ImageAnalysisController {
     }
 
     @GetMapping("/list")
-    public ResponseEntity<Result> getList() {
+    public ResponseEntity<Result<?>> getList() {
         log.info("查询巡检记录列表");
         return ResponseEntity.ok(Result.success(inspectRecordMapper.listAll()));
     }
 
     @DeleteMapping("/delete/{id}")
-    public ResponseEntity<Result> delete(@PathVariable Long id) {
+    public ResponseEntity<Result<?>> delete(@PathVariable Long id) {
         inspectRecordMapper.deleteById(id);
         log.info("删除巡检记录, id: {}", id);
         return ResponseEntity.ok(Result.success("删除成功"));

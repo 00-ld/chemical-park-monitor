@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Result> handleValidationException(MethodArgumentNotValidException exception) {
+    public ResponseEntity<Result<?>> handleValidationException(MethodArgumentNotValidException exception) {
         String message = exception.getBindingResult().getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining(", "));
@@ -25,13 +25,13 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Result> handleIllegalArgument(IllegalArgumentException exception) {
+    public ResponseEntity<Result<?>> handleIllegalArgument(IllegalArgumentException exception) {
         log.warn("非法参数: {}", exception.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Result.error(400, exception.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Result> handleException(Exception exception) {
+    public ResponseEntity<Result<?>> handleException(Exception exception) {
         log.error("系统异常: ", exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Result.error("服务器内部错误"));
     }

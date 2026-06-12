@@ -42,7 +42,7 @@ public class LoginAndRegisterController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<Result> login(@Valid @RequestBody User user, HttpServletRequest request) {
+    public ResponseEntity<Result<?>> login(@Valid @RequestBody User user, HttpServletRequest request) {
         // 限流：同一 IP 每分钟最多登录尝试 10 次，防止暴力破解
         String ip = request.getRemoteAddr();
         if (isRateLimited(loginAttempts, ip, MAX_LOGIN_PER_MINUTE)) {
@@ -60,7 +60,7 @@ public class LoginAndRegisterController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<Result> register(@Valid @RequestBody User user, HttpServletRequest request) {
+    public ResponseEntity<Result<?>> register(@Valid @RequestBody User user, HttpServletRequest request) {
         // 限流：每个 IP 每分钟最多注册 5 次
         String ip = request.getRemoteAddr();
         if (isRateLimited(registerAttempts, ip, MAX_REGISTER_PER_MINUTE)) {

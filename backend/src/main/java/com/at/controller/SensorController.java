@@ -20,7 +20,7 @@ public class SensorController {
     private SensorService sensorService;
 
     @GetMapping("/list")
-    public ResponseEntity<Result> getAllSensors() {
+    public ResponseEntity<Result<?>> getAllSensors() {
         try {
             List<Sensor> list = sensorService.getAllSensors();
             log.info("查询所有传感器, 数量: {}", list.size());
@@ -32,7 +32,7 @@ public class SensorController {
     }
 
     @PostMapping("/add")
-    public ResponseEntity<Result> addSensor(@RequestBody Sensor sensor) {
+    public ResponseEntity<Result<?>> addSensor(@RequestBody Sensor sensor) {
         try {
             if (sensor.getId() == null || sensor.getId().isEmpty()) {
                 return ResponseEntity.badRequest().body(Result.error("传感器ID不能为空"));
@@ -51,7 +51,7 @@ public class SensorController {
     }
 
     @PostMapping("/update")
-    public ResponseEntity<Result> updateSensor(@RequestBody Sensor sensor) {
+    public ResponseEntity<Result<?>> updateSensor(@RequestBody Sensor sensor) {
         try {
             if (sensor.getId() == null || sensor.getId().isEmpty()) {
                 return ResponseEntity.badRequest().body(Result.error("传感器ID不能为空"));
@@ -70,7 +70,7 @@ public class SensorController {
     }
 
     @PostMapping("/delete")
-    public ResponseEntity<Result> deleteSensor(@RequestBody Map<String, String> param) {
+    public ResponseEntity<Result<?>> deleteSensor(@RequestBody Map<String, String> param) {
         try {
             String id = param.get("id");
             if (id == null || id.isEmpty()) {

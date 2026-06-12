@@ -21,7 +21,7 @@ public class SensorLayoutController {
     private SensorLayoutService sensorLayoutService;
 
     @GetMapping("/list")
-    public ResponseEntity<Result> getAllLayouts() {
+    public ResponseEntity<Result<?>> getAllLayouts() {
         try {
             List<SensorLayout> list = sensorLayoutService.getAllLayouts();
             log.info("查询所有布局方案, 数量: {}", list.size());
@@ -33,7 +33,7 @@ public class SensorLayoutController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Result> getLayoutById(@PathVariable Integer id) {
+    public ResponseEntity<Result<?>> getLayoutById(@PathVariable Integer id) {
         try {
             SensorLayout layout = sensorLayoutService.getLayoutById(id);
             if (layout == null) {
@@ -49,7 +49,7 @@ public class SensorLayoutController {
     }
 
     @PostMapping("/save")
-    public ResponseEntity<Result> saveLayout(@RequestBody Map<String, Object> param) {
+    public ResponseEntity<Result<?>> saveLayout(@RequestBody Map<String, Object> param) {
         try {
             SensorLayout layout = new SensorLayout();
             layout.setLayoutName((String) param.get("layoutName"));
@@ -82,7 +82,7 @@ public class SensorLayoutController {
     }
 
     @PostMapping("/delete/{id}")
-    public ResponseEntity<Result> deleteLayout(@PathVariable Integer id) {
+    public ResponseEntity<Result<?>> deleteLayout(@PathVariable Integer id) {
         try {
             sensorLayoutService.deleteLayout(id);
             log.info("删除布局方案成功: id={}", id);

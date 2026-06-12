@@ -20,7 +20,7 @@ public class GasController {
     private GasService gasService;
 
     @GetMapping("/list")
-    public ResponseEntity<Result> getAllGases() {
+    public ResponseEntity<Result<?>> getAllGases() {
         try {
             List<Gas> list = gasService.getAllGases();
             log.info("查询所有气体类型, 数量: {}", list.size());
@@ -32,7 +32,7 @@ public class GasController {
     }
 
     @PostMapping("/add")
-    public ResponseEntity<Result> addGas(@RequestBody Gas gas) {
+    public ResponseEntity<Result<?>> addGas(@RequestBody Gas gas) {
         try {
             if (gas.getId() == null || gas.getId().isEmpty()) {
                 return ResponseEntity.badRequest().body(Result.error("气体编号不能为空"));
@@ -54,7 +54,7 @@ public class GasController {
     }
 
     @PostMapping("/update")
-    public ResponseEntity<Result> updateGas(@RequestBody Gas gas) {
+    public ResponseEntity<Result<?>> updateGas(@RequestBody Gas gas) {
         try {
             if (gas.getId() == null || gas.getId().isEmpty()) {
                 return ResponseEntity.badRequest().body(Result.error("气体编号不能为空"));
@@ -73,7 +73,7 @@ public class GasController {
     }
 
     @PostMapping("/delete")
-    public ResponseEntity<Result> deleteGas(@RequestBody Map<String, String> param) {
+    public ResponseEntity<Result<?>> deleteGas(@RequestBody Map<String, String> param) {
         try {
             String id = param.get("id");
             if (id == null || id.isEmpty()) {

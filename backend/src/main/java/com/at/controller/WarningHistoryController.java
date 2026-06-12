@@ -31,7 +31,7 @@ public class WarningHistoryController {
     }
 
     @PostMapping("/add")
-    public ResponseEntity<Result> addWarning(@RequestBody Map<String, Object> param) {
+    public ResponseEntity<Result<?>> addWarning(@RequestBody Map<String, Object> param) {
         try {
             Integer carId = (Integer) param.get("carId");
             String gasType = (String) param.get("gasType");
@@ -61,7 +61,7 @@ public class WarningHistoryController {
     }
 
     @GetMapping("/list")
-    public ResponseEntity<Result> getHistoryList() {
+    public ResponseEntity<Result<?>> getHistoryList() {
         try {
             List<WarningHistory> list = warningHistoryService.getAllHistory();
             log.info("查询历史记录, 数量: {}", list.size());
@@ -73,7 +73,7 @@ public class WarningHistoryController {
     }
 
     @PostMapping("/delete")
-    public ResponseEntity<Result> deleteHistory(@RequestBody Map<String, Integer> param) {
+    public ResponseEntity<Result<?>> deleteHistory(@RequestBody Map<String, Integer> param) {
         try {
             Integer id = param.get("id");
             if (id == null) {

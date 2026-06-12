@@ -19,7 +19,7 @@ public class CarController {
     private CarService carService;
 
     @GetMapping("/getAllCars")
-    public ResponseEntity<Result> getAllCars() {
+    public ResponseEntity<Result<?>> getAllCars() {
         try {
             List<Car> carList = carService.getAllCars();
             log.info("查询所有小车状态, 数量: {}", carList.size());
@@ -31,7 +31,7 @@ public class CarController {
     }
 
     @PostMapping("/setWarning")
-    public ResponseEntity<Result> setWarning(@RequestBody java.util.Map<String, Integer> param) {
+    public ResponseEntity<Result<?>> setWarning(@RequestBody java.util.Map<String, Integer> param) {
         Integer carId = param.get("carId");
 
         if (carId == null || carId < 1 || carId > 4) {
@@ -49,7 +49,7 @@ public class CarController {
     }
 
     @PostMapping("/resetStatus")
-    public ResponseEntity<Result> resetStatus(@RequestBody java.util.Map<String, Integer> param) {
+    public ResponseEntity<Result<?>> resetStatus(@RequestBody java.util.Map<String, Integer> param) {
         Integer carId = param.get("carId");
 
         if (carId == null || carId < 1 || carId > 4) {
