@@ -35,6 +35,7 @@
   db/                数据库目录台账、脚本索引和维护规则
   deploy/            Docker、Nginx、MySQL 初始化和部署配置
   docs/              项目总体要求、接口文档、数据集来源、架构说明
+  tools/             审计、校验、数据整理等辅助工具脚本
   img/               项目图片资源
 ```
 
@@ -147,6 +148,7 @@ python GasModelTest/test_forward_model.py
 - [docs/项目总体要求.md](docs/项目总体要求.md)
 - [docs/api-reference.md](docs/api-reference.md)
 - [docs/dataset-sources.md](docs/dataset-sources.md)
+- [docs/sensor-placement-guide.md](docs/sensor-placement-guide.md)
 - [db/README.md](db/README.md)
 - [GasModelTest/README.md](GasModelTest/README.md)
 

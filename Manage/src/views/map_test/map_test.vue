@@ -2513,7 +2513,7 @@ function computeSensorRisk(sensor, facility) {
   //   30~49人 = 1.2    1~29人 = 1.0
   //   0人 = 0.5
   //
-  // 按区域前缀映射α (与 sensor_audit.py ZONE_ALPHA 一致)
+  // 按区域前缀映射α (与 tools/sensor_audit.py ZONE_ALPHA 一致)
   const ZONE_ALPHA = {
     'PA': 1.2, 'PB': 1.2, 'P2': 1.2,  // 化工生产区: 30~49人
     'A':  1.5,                           // 行政办公区: 50~99人
