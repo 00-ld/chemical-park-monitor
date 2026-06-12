@@ -19,9 +19,9 @@
 frontend/
   src/views/home/             主页态势展示
   src/views/screen/           SuperMap iPortal 数字大屏入口
-  src/views/map_test/         园区二维/三维实验视图
-  src/views/Car/              小车管理
-  src/views/YOLO/             小车图片识别页面
+  src/views/smart_map/        园区二维/三维智慧地图
+  src/views/car/              小车管理
+  src/views/yolo/             小车图片识别页面
   src/views/thing/            监控数据管理
   src/views/acl/              人员、角色、权限管理
   src/views/404/              统一 404 页面
@@ -36,19 +36,20 @@ frontend/
 | --- | --- | --- |
 | `/home` | `src/views/home/index.vue` | 首页态势总览，只做可视化与快捷入口 |
 | `/screen` | `src/views/screen/index.vue` | SuperMap iPortal 数字大屏入口 |
-| `/map_test` | `src/views/map_test/map_test.vue` | 智慧地图、扩散与溯源、二维/三维实验视图 |
+| `/smart-map` | `src/views/smart_map/index.vue` | 智慧地图、扩散与溯源、二维/三维实验视图 |
+| `/map_test` | 重定向到 `/smart-map` | 旧路径兼容入口，不作为新开发路径 |
 | `/thing/monitor_history` | `src/views/thing/monitor_history/index.vue` | 实时预警与监控数据记录 |
-| `/car/home` | `src/views/Car/CarHome.vue` | 阿克曼巡检小车总览 |
-| `/car/:id` | `src/views/Car/CarDetail.vue` | 小车详情 |
+| `/car/home` | `src/views/car/CarHome.vue` | 阿克曼巡检小车总览 |
+| `/car/:id` | `src/views/car/CarDetail.vue` | 小车详情 |
 | `/acl/role` | `src/views/acl/role/index.vue` | 管理员/角色管理 |
 | `/acl/employee` | `src/views/acl/employee/index.vue` | 员工与人员信息管理 |
-| `/yolo` | `src/views/YOLO/Home.vue` | YOLO11m 人员识别与厂区实时监测 |
+| `/yolo` | `src/views/yolo/Home.vue` | YOLO11m 人员识别与厂区实时监测 |
 | `/404` | `src/views/404/index.vue` | 统一 404 页面 |
 
 目录命名约束：
 
-- 新增一级页面目录优先使用小写英文，例如 `home`、`screen`、`emergency`。
-- 历史目录 `Car/`、`YOLO/` 暂时保留，避免破坏现有路由；新增页面不要继续扩散大小写混用命名。
+- 一级页面目录使用小写英文或小写蛇形命名，例如 `home`、`screen`、`smart_map`、`emergency`。
+- 历史目录 `Car/`、`YOLO/`、`map_test/` 已归并为 `car/`、`yolo/`、`smart_map/`；新增页面不要继续扩散大小写混用或测试式命名。
 - 不得新增中文目录、空格目录、测试副本目录或重复入口文件。
 - 页面私有说明文档可以放在对应页面目录下，例如 `src/views/home/README.md`。
 

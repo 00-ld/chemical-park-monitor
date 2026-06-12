@@ -24,7 +24,7 @@
             <el-menu-item index="/screen">数字园区</el-menu-item>
 
             <!-- 智慧地图（无下拉） -->
-            <el-menu-item index="/map_test">智慧地图</el-menu-item>
+            <el-menu-item index="/smart-map">智慧地图</el-menu-item>
 
             <!-- 预警与智巡（有子菜单） -->
             <el-sub-menu index="/warning-patrol">

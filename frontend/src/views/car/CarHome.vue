@@ -419,7 +419,7 @@ const goToCarDetail = (id) => {
 
 // ========== 导航函数（智慧地图 / 厂区实时监测） ==========
 const goToSmartMap = () => {
-  router.push('/map_test')
+  router.push('/smart-map')
 }
 
 const goToYoloMonitor = () => {
@@ -487,7 +487,7 @@ const handleSimulateDiffusion = async () => {
 
     const car = carList.value.find(c => c.id === selectedCarId.value)!
     router.push({
-      path: '/map_test',
+      path: '/smart-map',
       query: {
         carId: selectedCarId.value!,
         gasType: gasTypeMapping[selectedCarId.value!],

@@ -44,11 +44,20 @@ export const constantRoute = [
         },
       },
       {
-        path: '/map_test',
-        component: () => import('@/views/map_test/map_test.vue'),
+        path: '/smart-map',
+        component: () => import('@/views/smart_map/index.vue'),
         meta: {
           title: '智慧地图',
           hidden: false,
+          icon: 'Platform',
+        },
+      },
+      {
+        path: '/map_test',
+        redirect: '/smart-map',
+        meta: {
+          title: '智慧地图',
+          hidden: true,
           icon: 'Platform',
         },
       },
@@ -100,7 +109,7 @@ export const constantRoute = [
       },
       {
         path: '/car/home', // 子路由路径（小写规范）
-        component: () => import('@/views/Car/CarHome.vue'), // 匹配截图中 CarHome.vue 路径
+        component: () => import('@/views/car/CarHome.vue'),
         name: 'EquipmentInspect',
         meta: {
           title: '智巡监测', // 菜单标题
@@ -110,7 +119,7 @@ export const constantRoute = [
       },
       {
         path: '/car/:id',
-        component: () => import('@/views/Car/CarDetail.vue'), // 匹配截图中 CarDetail.vue
+        component: () => import('@/views/car/CarDetail.vue'),
         name: 'CarDetail',
         meta: {
           title: '小车详情',
@@ -191,7 +200,7 @@ export const constantRoute = [
     children: [
       {
         path: '/yolo',
-        component: () => import('@/views/YOLO/Home.vue'),
+        component: () => import('@/views/yolo/Home.vue'),
         name: 'SystemSetting',
         meta: {
           title: '厂区实时监测',
