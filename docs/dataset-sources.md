@@ -9,6 +9,7 @@
 | `tests/` | 已提交 | 合成解析数据 | 用高斯烟羽/烟团解析公式和固定随机种子生成，用于算法回归测试，不是现场实测数据。 |
 | `algorithm/diffusion/test_*` | 已提交 | 单元/回归验证 | 用物理不变量、公式基准和数值收敛检查验证扩散实现。 |
 | `algorithm/diffusion/test_calibration.py` | 已提交 | 合成回归验证 | 用已知 K 生成观测并验证标定流程能找回最佳 K，不是现场实测标定。 |
+| `datasets/samples/prairie_grass/PGrassOBSAnalysis.txt` | 已提交 | 真实野外扩散实验样本 | Prairie Grass 观测分析样本，当前仅用于 `Sy (m)` 横风向扩散宽度验证，不用于绝对浓度结论。 |
 | `.npy` 体数据 | 不提交 | 本地生成产物 | 由 `tests/generate_dataset.py` 生成，因体积和可复现性原因不进 GitHub。 |
 
 ## 候选权威来源
@@ -28,6 +29,28 @@
 - NOAA ISD HTTPS 数据入口: https://www.ncei.noaa.gov/data/global-hourly/
 - HARMO classic datasets: https://www.harmo.org/classic.php
 - Jack Rabbit Program: https://www.uvu.edu/es/jack-rabbit/
+
+## 已归档样本详情
+
+### Prairie Grass `PGrassOBSAnalysis.txt`
+
+| 字段 | 内容 |
+| --- | --- |
+| 仓库路径 | `datasets/samples/prairie_grass/PGrassOBSAnalysis.txt` |
+| 本地导入来源 | `C:\Users\colorful\Desktop\gas\GasModelTest\real_prairie_grass\PGrassOBSAnalysis.txt` |
+| 公开来源类别 | HARMO classic dispersion datasets / Prairie Grass field experiment |
+| 参考入口 | https://www.harmo.org/classic.php |
+| 导入日期 | 2026-06-12 |
+| 文件大小 | 47,878 bytes |
+| SHA256 | `71CBC94880D3A51E88E6594BE62213176DD28E302503C1A72EA7610495D10397` |
+| 当前用途 | `python -m diffusion.test_real_prairie_grass`，验证模型对实测 `Sy (m)` 横风向扩散宽度的拟合表现。 |
+| 不得扩大解释 | 不能据此宣称绝对浓度、事故全过程、三维 CFD 或全部危险气体场景已通过真实数据验证。 |
+
+字段使用范围：
+
+- 使用 `Exp`、`Dist (m)`、`Sy (m)`。
+- 保留但暂不使用 `OMAX`、`CMAX`、`CY`、`CMAX/Q`、`CY/Q`、`PHIC` 等列。
+- 稳定度未由文件直接给出，测试中按经典 Briggs `sigma_y` 对每组实验反推最佳 Pasquill 类别；该设定偏向经典模型，因此结论必须保持客观表述。
 
 ## 接入流程
 
