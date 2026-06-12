@@ -48,7 +48,7 @@ RULES = [
     ),
     Rule(
         name="stale-entrypoint-artifact",
-        pattern=re.compile(r"(^|/)(apiServer\.py|.*\.spec|pnpm-lock\.yaml|vite\.svg)$"),
+        pattern=re.compile(r"(^|/)(apiServer\.py|gasDiffusionAstar\.py|.*\.spec|pnpm-lock\.yaml|vite\.svg)$"),
         description="stale generated or duplicate entrypoint artifact",
     ),
 ]
