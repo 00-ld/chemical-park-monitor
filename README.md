@@ -129,6 +129,7 @@ python -m diffusion.test_improved_formula
 python -m diffusion.test_gaussian_validation
 
 cd ..
+python tools/audit_repository.py
 python algorithm_tests/test_forward_model.py
 ```
 
@@ -143,7 +144,7 @@ python algorithm_tests/test_forward_model.py
 - 大体积模型权重、`.npy` 体数据、生产数据库备份、未脱敏真实数据。
 - 重复文档、乱码文档、临时文件、个人笔记和无维护价值文件。
 
-每次按子目录改动时应单独提交，便于回滚和审查。
+每次按子目录改动时应单独提交，便于回滚和审查。提交前建议运行 `python tools/audit_repository.py`，确认禁止提交内容没有进入 Git 跟踪。
 
 ## 关键文档
 
