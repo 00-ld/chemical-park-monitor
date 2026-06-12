@@ -1,0 +1,117 @@
+# 技术路线到部署总览
+
+本文面向 GitHub 阅读者，说明本项目从技术路线、模块分工、算法验证到服务器部署的完整链路。
+
+## 1. 项目目标
+
+系统围绕化工园区危险气体泄漏场景，建设“监测 - 扩散模拟 - 泄漏源溯源 - 逃生路径规划 - 可视化决策”的闭环能力。当前阶段保持现有技术栈和目录映射，不做大规模迁移：
+
+| 领域 | 当前目录 | 技术路线 |
+| --- | --- | --- |
+| 前端可视化 | `Manage/` | Vue 3、ECharts、Canvas，保持现有深色工业风页面风格 |
+| Java 后端 | `Back/` | Spring Boot、MyBatis、MySQL、JWT、统一 JSON 响应 |
+| Python 算法服务 | `python/` | FastAPI、NumPy、SciPy、PyTorch、扩散/溯源/路径算法 |
+| 三维数字孪生 | `Manage/src/views/screen/` | 优先接入 SuperMap iPortal 数字大屏 |
+| 数据库 | `db/`、`deploy/mysql/` | MySQL 8、utf8mb4、迁移/种子数据台账 |
+| 部署 | `deploy/` | Docker Compose、Nginx 反向代理、域名部署 |
+| 参考资料 | `docs/references/` | 政策、算法、设备资料，禁止堆放在根目录 |
+
+## 2. 业务链路
+
+1. 固定传感器和阿克曼巡检小车采集 CO、O2、NH3、CH4 浓度数据。
+2. Java 后端负责用户、传感器、小车、告警、记录等业务数据管理。
+3. Python 算法服务根据泄漏源、风速、稳定度、气体参数等输入运行扩散模拟。
+4. 溯源算法使用多点浓度数据估计泄漏位置，并输出候选源位置与置信信息。
+5. D* Lite 等路径规划算法结合危险浓度区域生成逃生路径，并随扩散场变化更新。
+6. 前端在二维页面展示监控点位、浓度分布、逃生路径和告警联动。
+7. 三维展示优先通过 SuperMap iPortal 已有数字大屏嵌入，后续再扩展 Three.js/SuperMap 原生三维能力。
+
+## 3. 接口协议
+
+所有 Java 后端和 Python 算法接口统一返回 JSON 外壳：
+
+```json
+{
+  "code": 200,
+  "message": "成功",
+  "data": {},
+  "ok": true,
+  "timestamp": 1781234567890,
+  "requestId": "uuid"
+}
+```
+
+Python 算法服务暂时保留 `success` 和 `error` 字段用于兼容旧前端调用。详细字段、错误码和接口清单见 `docs/api-reference.md`。
+
+## 4. 气体扩散模型接入状态
+
+桌面 `gas/` 文件夹是完整扩散模型和验证材料来源，但不能整体提交到 GitHub，因为其中包含缓存、视频工程、`node_modules`、大型数据集和外部工具。
+
+当前仓库接入状态：
+
+| 内容 | 仓库状态 | 说明 |
+| --- | --- | --- |
+| `gas/diffusion/gaussian_plume.py` | 已接入 `python/diffusion/gaussian_plume.py` | SHA256 一致 |
+| `gas/diffusion/phase1_diffusion.py` | 已接入 `python/diffusion/phase1_diffusion.py` | SHA256 一致 |
+| 基准验证脚本 | 已接入 | `test_gaussian_validation.py`、`test_improved_formula.py` |
+| 物理不变量验证 | 已补充 | `test_physical_invariants.py`，不依赖外部数据 |
+| Prairie Grass 真实数据验证 | 暂不提交 | 依赖未入库大数据文件，需先完成来源、许可和字段说明 |
+| 大型真实数据集 | 暂不提交 | 仅记录来源台账，必要时通过外部存储或下载脚本复现 |
+
+## 5. 数据与验证原则
+
+- 合成数据必须明确标注为合成数据，不能写成真实实测数据。
+- 真实数据接入前必须记录来源 URL、下载时间、许可、字段含义、单位换算和预处理步骤。
+- 扩散模型验证至少覆盖公式基准、物理不变量、数值收敛、单位换算和回归数据集。
+- 结论保持客观：说明适用范围、误差、失败场景，不写“绝对准确”。
+
+常用验证命令：
+
+```bash
+cd python
+python -m diffusion.test_physical_invariants
+python -m diffusion.test_improved_formula
+python -m diffusion.test_gaussian_validation
+
+cd ..
+python GasModelTest/test_forward_model.py
+```
+
+## 6. 部署路线
+
+生产部署目标域名：`www.cip.lab6119.xyz`。
+
+部署入口：
+
+1. 前端构建产物由 Nginx 提供静态访问。
+2. `/api/*` 由 Nginx 转发到 Java 后端。
+3. `/algorithm-api/*` 由 Nginx 转发到 Python 算法服务，并在服务端注入 `X-API-Key`，避免浏览器暴露算法密钥。
+4. MySQL 仅在容器内部或服务器回环地址开放，不暴露公网。
+5. SuperMap iPortal 大屏地址通过 `VITE_IPORTAL_DASHBOARD_URL` 配置。
+
+关键配置文件：
+
+| 文件 | 用途 |
+| --- | --- |
+| `deploy/docker-compose.yml` | Nginx、Java、Python、MySQL 服务编排 |
+| `deploy/nginx/default.conf` | 静态资源、API、算法服务反向代理 |
+| `deploy/.env.example` | 环境变量模板，真实 `.env` 不得提交 |
+| `Manage/.env.production` | 前端生产环境 API 和 iPortal 配置 |
+| `Back/src/main/resources/application.yml` | 后端环境变量配置模板 |
+
+部署步骤详见 `deploy/README.md`。生产环境必须替换 `MYSQL_ROOT_PASSWORD`、`JWT_SECRET`、`ALGORITHM_API_KEY`、`ANALYSIS_SERVICE_URL`、`CORS_ALLOWED_ORIGINS` 等变量。
+
+## 7. GitHub 提交边界
+
+允许提交：
+
+- 源码、接口文档、数据库结构脚本、可复现小体积测试数据、配置模板。
+- 说明清楚用途和维护规则的规范目录。
+
+禁止提交：
+
+- 真实 `.env`、数据库密码、用户密码、API Key、token 密钥、私钥、证书。
+- `node_modules/`、`.venv/`、`__pycache__/`、`dist/`、`target/`、`.npy`、模型权重、临时文件。
+- 未授权真实数据、生产数据库备份、生产日志、个人笔记、重复文档。
+
+每次按子目录改动单独提交并推送，便于后续回滚和审查。

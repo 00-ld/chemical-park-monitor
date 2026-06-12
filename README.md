@@ -124,6 +124,7 @@ cd ../Manage
 npm.cmd exec tsc -- -p tsconfig.json --noEmit --pretty false
 
 cd ../python
+python -m diffusion.test_physical_invariants
 python -m diffusion.test_improved_formula
 python -m diffusion.test_gaussian_validation
 
@@ -147,6 +148,7 @@ python GasModelTest/test_forward_model.py
 ## 关键文档
 
 - [docs/项目总体要求.md](docs/项目总体要求.md)
+- [docs/technical-route-to-deployment.md](docs/technical-route-to-deployment.md)
 - [docs/api-reference.md](docs/api-reference.md)
 - [docs/dataset-sources.md](docs/dataset-sources.md)
 - [docs/sensor-placement-guide.md](docs/sensor-placement-guide.md)
