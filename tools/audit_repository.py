@@ -23,7 +23,7 @@ class Rule:
 RULES = [
     Rule(
         name="legacy-top-level-directory",
-        pattern=re.compile(r"^(Manage|Back|python|GasModelTest|img)/"),
+        pattern=re.compile(r"^(Manage|Back|python|GasModelTest|img|chemical-park-monitor|algorithm_tests)/"),
         description="old top-level directory name",
     ),
     Rule(

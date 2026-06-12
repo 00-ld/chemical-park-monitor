@@ -74,7 +74,7 @@ python -m diffusion.test_improved_formula
 python -m diffusion.test_gaussian_validation
 
 cd ..
-python algorithm_tests/test_forward_model.py
+python tests/test_forward_model.py
 ```
 
 ## 6. 部署路线

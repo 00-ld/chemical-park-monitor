@@ -1,6 +1,6 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""algorithm_tests Case 1 正向高斯烟羽模型精度验证脚本。
+"""tests Case 1 正向高斯烟羽模型精度验证脚本。
 
 直接 import 项目算法 ``python.diffusion.gaussian_plume``，在与数据集完全
 相同的网格 / 源参数 / 风速 / 稳定度上调用当前实现，得到模型预测浓度场，
@@ -15,7 +15,7 @@
     - 直接给算法传源参数与风速 u=5, 不走 10m 风廓线换算, 以隔离 σ 公式影响
 
 复跑:
-    python algorithm_tests/test_forward_model.py
+    python tests/test_forward_model.py
 依赖: numpy, pandas (项目已装)
 """
 from __future__ import annotations
@@ -143,7 +143,7 @@ def fmt(v, n=4):
 
 def main():
     print("=" * 96)
-    print("algorithm_tests Case 1 — 正向高斯烟羽模型精度验证")
+    print("tests Case 1 — 正向高斯烟羽模型精度验证")
     print("源: x=0 y=0 H=50m Q=100g/s, u=5m/s, open-country, 比较单位 mg/m^3")
     print("=" * 96)
 
@@ -199,7 +199,7 @@ def main():
     print("\n[表4] 3D 体数据对比 (plume_3d_D.npy, shape [nx,ny,nz])")
     truth3d_path = os.path.join(CASE1, "plume_3d_D.npy")
     if not os.path.exists(truth3d_path):
-        print("跳过: plume_3d_D.npy 未提交到仓库。需要 3D 对比时请先运行 algorithm_tests/generate_dataset.py 生成。")
+        print("跳过: plume_3d_D.npy 未提交到仓库。需要 3D 对比时请先运行 tests/generate_dataset.py 生成。")
     else:
         truth3d = np.load(truth3d_path).astype(float)
         pred3d = predict_3d_field("D")

@@ -16,6 +16,13 @@
 | Python 模块 | snake_case | `diffusion_runner.py` |
 | Python 类 | PascalCase | `AStarPathPlanner` |
 
+### 目录命名规范
+
+- 一级目录统一使用小写英文领域名，当前规范目录为 `frontend/`、`backend/`、`algorithm/`、`tests/`、`db/`、`deploy/`、`docs/`、`tools/`、`assets/`。
+- 禁止提交中文目录名、空格目录名、大小写混用目录名、个人临时目录名和旧工程目录名。
+- 历史目录名必须归并到规范目录：`Manage/` 归并到 `frontend/`，`Back/` 归并到 `backend/`，`algorithm_tests/` 归并到 `tests/`，`python/` 归并到 `algorithm/`。
+- 二级目录按技术栈约定命名：Python 使用 `snake_case`，Java 包路径使用小写英文，Vue 组件目录使用清晰英文语义。
+
 ### 文件结构
 
 ```

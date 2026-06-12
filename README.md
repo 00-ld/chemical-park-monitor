@@ -31,7 +31,7 @@
   backend/              Java Spring Boot 后端
   frontend/            Vue 3 前端管理系统
   algorithm/            Python 算法服务与扩散/溯源/路径规划算法
-  algorithm_tests/      气体模型可复现测试数据与验证脚本
+  tests/                气体模型可复现测试数据与验证脚本
   db/                数据库目录台账、脚本索引和维护规则
   deploy/            Docker、Nginx、MySQL 初始化和部署配置
   docs/              项目总体要求、接口文档、数据集来源、架构说明
@@ -130,10 +130,10 @@ python -m diffusion.test_gaussian_validation
 
 cd ..
 python tools/audit_repository.py
-python algorithm_tests/test_forward_model.py
+python tests/test_forward_model.py
 ```
 
-`algorithm_tests/` 当前数据是合成解析数据，用于回归验证，不得写成现场实测数据。真实/权威数据来源台账见 [docs/dataset-sources.md](docs/dataset-sources.md)。
+`tests/` 当前数据是合成解析数据，用于回归验证，不得写成现场实测数据。真实/权威数据来源台账见 [docs/dataset-sources.md](docs/dataset-sources.md)。
 
 ## GitHub 提交约束
 
@@ -142,7 +142,7 @@ python algorithm_tests/test_forward_model.py
 - 真实 `.env` 文件、数据库密码、用户密码、API Key、token 密钥、私钥或证书。
 - `node_modules/`、`.venv/`、`__pycache__/`、`.pytest_cache/`、`dist/`、`target/` 等依赖、缓存和构建产物。
 - 大体积模型权重、`.npy` 体数据、生产数据库备份、未脱敏真实数据。
-- 重复文档、乱码文档、临时文件、个人笔记和无维护价值文件。
+- 重复文档、乱码文档、临时文件、个人笔记、旧目录和无维护价值文件。
 
 每次按子目录改动时应单独提交，便于回滚和审查。提交前建议运行 `python tools/audit_repository.py`，确认禁止提交内容没有进入 Git 跟踪。
 
@@ -154,7 +154,7 @@ python algorithm_tests/test_forward_model.py
 - [docs/dataset-sources.md](docs/dataset-sources.md)
 - [docs/sensor-placement-guide.md](docs/sensor-placement-guide.md)
 - [db/README.md](db/README.md)
-- [algorithm_tests/README.md](algorithm_tests/README.md)
+- [tests/README.md](tests/README.md)
 
 ## License
 

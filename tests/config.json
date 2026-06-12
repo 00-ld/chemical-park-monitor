@@ -1,5 +1,5 @@
-﻿{
-  "_comment": "algorithm_tests global configuration. Units: coordinates=m, wind=m/s, source=g/s, concentration=mg/m^3. Re-run generate_dataset.py after changing parameters.",
+{
+  "_comment": "tests global configuration. Units: coordinates=m, wind=m/s, source=g/s, concentration=mg/m^3. Re-run generate_dataset.py after changing parameters.",
   "random_seed": 20260608,
   "domain": {
     "x_min": 0.0,

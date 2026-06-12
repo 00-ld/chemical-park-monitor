@@ -47,7 +47,13 @@ omc/
 .omc/
 .codegraph/
 .codex-run-logs/
+Back/
+Manage/
+GasModelTest/
+algorithm_tests/
 chemical-park-monitor/
+img/
+python/
 *.tmp
 *.temp
 *.bak
