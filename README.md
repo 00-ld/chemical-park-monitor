@@ -2,7 +2,7 @@
 
 本项目围绕化工园区危险气体扩散模拟、泄漏源溯源、传感器监控点位、小车巡检、逃生路径规划和 SuperMap iPortal 数字大屏展示构建。
 
-当前仓库已按规范目录命名：前端在 `frontend/`，Java 后端在 `backend/`，Python 算法服务在 `algorithm/`，数据库台账在 `db/`，部署配置在 `deploy/`。
+当前仓库已按规范目录组织：前端在 `frontend/`，Java 后端在 `backend/`，Python 算法服务在 `algorithm/`，三维数字孪生接入在 `twin/` 与前端三维页面中维护，数据库台账在 `db/`，部署配置在 `deploy/`。
 
 ## 核心能力
 
@@ -20,24 +20,43 @@
 | 前端 | `frontend/` | Vue 3、TypeScript、Vite、Element Plus、Pinia、ECharts、Canvas |
 | 后端 | `backend/` | Spring Boot 3.4、JDK 21、MyBatis、MySQL、JWT |
 | 算法服务 | `algorithm/` | FastAPI、NumPy、SciPy、PyTorch、Ultralytics YOLO11 |
-| 三维/数字孪生 | `frontend/src/views/screen/` | SuperMap iPortal 数字大屏 URL 嵌入 |
+| 三维/数字孪生 | `twin/`、`frontend/src/views/screen/` | SuperMap iPortal 数字大屏优先，Three.js/SuperMap 原生能力预留 |
 | 数据库 | `db/`、`deploy/mysql/` | MySQL 8、utf8mb4 |
 | 部署 | `deploy/` | Docker Compose、Nginx、MySQL、前后端服务 |
+
+## 技术路线
+
+系统技术路线按“数据采集 -> 扩散模拟 -> 异常识别 -> 泄漏源溯源 -> 逃生路径规划 -> 二维/三维展示 -> 安全联动”组织：
+
+1. 固定气体传感器和阿克曼巡检小车采集 CO、O2、NH3、CH4 浓度数据。
+2. Python 算法服务基于扩散模型生成浓度场，并通过测试集和校准流程验证模型行为。
+3. Java 后端统一接收传感器、小车、算法任务和用户管理数据，按统一 JSON 响应协议对外提供接口。
+4. 前端用 ECharts 展示统计趋势，用 Canvas 展示二维浓度分布、监控点位和 D* Lite 逃生路线。
+5. 三维展示阶段优先嵌入已有 SuperMap iPortal 数字大屏，后续再扩展 Three.js/SuperMap 原生三维场景。
+6. 事故处置建议、逃生规范建议等大模型能力只作为辅助参考，不替代扩散模型、溯源模型和现场负责人决策。
 
 ## 目录说明
 
 ```text
 .
-  backend/              Java Spring Boot 后端
-  frontend/            Vue 3 前端管理系统
-  algorithm/            Python 算法服务与扩散/溯源/路径规划算法
-  tests/                气体模型可复现测试数据与验证脚本
+  frontend/          Vue 3 前端管理系统
+  backend/           Java Spring Boot 后端
+  algorithm/         Python 算法服务与扩散/溯源/路径规划算法
+  twin/              SuperMap iPortal、Three.js 和三维坐标映射资料
   db/                数据库目录台账、脚本索引和维护规则
-  deploy/            Docker、Nginx、MySQL 初始化和部署配置
+  datasets/          权威数据集来源、清单和小型可复现实验样本
+  models/            模型清单、版本说明和轻量配置，不提交大模型权重
   docs/              项目总体要求、接口文档、数据集来源、架构说明
-  docs/references/   政策、算法、设备等参考资料
+  tests/             气体模型可复现测试数据与验证脚本
   tools/             审计、校验、数据整理等辅助工具脚本
-  assets/               项目图片资源
+  scripts/           开发、构建、数据处理和发布辅助脚本
+  docker/            共享容器构建资料
+  deploy/            Docker Compose、Nginx、MySQL 初始化和服务器部署配置
+  config/            配置模板，不存放真实密钥
+  uploads/           本地上传占位目录，真实上传文件不提交
+  logs/              本地日志占位目录，真实运行日志不提交
+  assets/            项目图片、图标、地图和轻量三维静态资源
+  .github/           CI、检查规则和 GitHub 仓库配置
 ```
 
 ## 统一接口协议
@@ -111,6 +130,19 @@ npm run dev
 ```
 
 SuperMap iPortal 数字大屏地址通过 `VITE_IPORTAL_DASHBOARD_URL` 配置。
+
+## 服务器部署
+
+生产部署目标域名预留为 `www.cip.lab6119.xyz`，部署入口在 `deploy/`：
+
+```bash
+cd deploy
+cp .env.example .env
+docker compose --env-file .env config
+docker compose --env-file .env up -d --build
+```
+
+上线前必须替换 `.env` 中的占位变量，并确认 Nginx、后端、算法服务、MySQL 和 iPortal iframe 地址均指向生产环境。详细部署路线见 [docs/technical-route-to-deployment.md](docs/technical-route-to-deployment.md) 和 [deploy/README.md](deploy/README.md)。
 
 ## 测试与验证
 
