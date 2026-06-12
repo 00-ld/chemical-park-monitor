@@ -2,7 +2,7 @@
 
 Integrates Gaussian plume dispersion modeling with A* path planning on
 a factory road network. Provides hazard-aware escape routing with
-multi-gas support (CH4, H2S, CO, O2).
+multi-gas support (CH4, NH3, CO, O2).
 
 Key components:
     - FactoryLayout: 2D factory road network and building map.
@@ -29,7 +29,7 @@ Point = Tuple[float, float]
 
 class GasType(Enum):
     CH4 = "methane"
-    H2S = "hydrogen_sulfide"
+    NH3 = "ammonia"
     CO = "carbon_monoxide"
     O2 = "oxygen"
 
@@ -57,15 +57,15 @@ GAS_PROPERTIES_MAP: Dict[GasType, GasProperties] = {
         color="#E74C3C",
         name="甲烷(CH4)"
     ),
-    GasType.H2S: GasProperties(
-        molecular_weight=34.08,
-        diffusion_coefficient=0.16,
-        density_ratio=1.19,
-        safety_threshold_ppm=10.0,
-        idlh_threshold_ppm=100.0,
-        decay_rate=0.0012,
+    GasType.NH3: GasProperties(
+        molecular_weight=17.03,
+        diffusion_coefficient=0.23,
+        density_ratio=0.59,
+        safety_threshold_ppm=25.0,
+        idlh_threshold_ppm=300.0,
+        decay_rate=0.0010,
         color="#9B59B6",
-        name="硫化氢(H2S)"
+        name="氨气(NH3)"
     ),
     GasType.CO: GasProperties(
         molecular_weight=28.01,
@@ -756,7 +756,7 @@ class IntegratedEscapeSystem:
         """Build diffusion sources from car-to-building-to-gas mapping.
 
         Maps car IDs to building and gas type:
-            1 -> workshop1 (CH4), 2 -> equipment_room (H2S),
+            1 -> workshop1 (CH4), 2 -> equipment_room (NH3),
             3 -> workshop2 (CO), 4 -> warehouse (O2).
 
         Args:
@@ -769,7 +769,7 @@ class IntegratedEscapeSystem:
         """
         car_source_map: Dict[int, Tuple[str, GasType]] = {
             1: ("workshop1", GasType.CH4),
-            2: ("equipment_room", GasType.H2S),
+            2: ("equipment_room", GasType.NH3),
             3: ("workshop2", GasType.CO),
             4: ("warehouse", GasType.O2),
         }

@@ -5,7 +5,7 @@ a task type and JSON payload string, then routing to the appropriate
 algorithm module.
 
 Typical usage:
-    result = run_task("run_diffusion_simulation", '{"gasId": "h2s", ...}')
+    result = run_task("run_diffusion_simulation", '{"gasId": "nh3", ...}')
 """
 
 from __future__ import annotations

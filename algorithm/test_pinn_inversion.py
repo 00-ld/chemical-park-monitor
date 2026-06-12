@@ -86,7 +86,7 @@ def generate_time_series_readings(source, sensors, wind_speed, wind_direction, e
 def build_coarse_search_payload(sensors, wind_speed, wind_direction, current_frame_index=20):
     """Build a coarse search API payload."""
     return {
-        "gas": {"gasId": "H2S", "id": "H2S", "warningThreshold": 10, "dangerThreshold": 20},
+        "gas": {"gasId": "NH3", "id": "NH3", "warningThreshold": 25, "dangerThreshold": 50},
         "scenario": {"windSpeed": wind_speed, "windDirection": wind_direction},
         "sensors": sensors,
         "currentFrameIndex": current_frame_index,
@@ -106,7 +106,7 @@ def build_inversion_payload(sensors, coarse_result, wind_speed, wind_direction, 
     """Build a full inversion API payload."""
     return {
         "refinementInput": {
-            "gas": {"gasId": "H2S", "id": "H2S", "warningThreshold": 10, "dangerThreshold": 20},
+            "gas": {"gasId": "NH3", "id": "NH3", "warningThreshold": 25, "dangerThreshold": 50},
             "scenario": {"windSpeed": wind_speed, "windDirection": wind_direction},
             "trainingConfig": {"topK": 4, "animationSteps": 15, "minSignalThreshold": 0.01},
             "frameContext": {"currentFrameIndex": current_frame_index},

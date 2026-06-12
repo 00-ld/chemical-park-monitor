@@ -64,15 +64,15 @@ PHASE1_GASES = [
         "blockingThreshold": 75,
     },
     {
-        "id": "h2s",
-        "name": "硫化氢",
-        "color": "#ef4444",
-        "densityRatio": 1.19,
-        "molarMass": 34.08,
-        "diffusionBias": 0.9,
-        "warningThreshold": 8,
-        "dangerThreshold": 20,
-        "blockingThreshold": 24,
+        "id": "nh3",
+        "name": "氨气",
+        "color": "#a855f7",
+        "densityRatio": 0.59,
+        "molarMass": 17.03,
+        "diffusionBias": 1.25,
+        "warningThreshold": 25,
+        "dangerThreshold": 50,
+        "blockingThreshold": 75,
     },
     {
         "id": "ch4",
@@ -103,7 +103,7 @@ def get_gas_by_id(gas_id: Optional[str]) -> Dict:
     """根据气体标识查找气体属性。
 
     参数：
-        gas_id: 气体标识字符串，例如 'h2s'、'nh3'、'co'、'toluene'。
+        gas_id: 气体标识字符串，例如 'nh3'、'co'、'ch4'、'o2'。
 
     返回：
         气体属性字典；找不到时默认返回第一个气体。
