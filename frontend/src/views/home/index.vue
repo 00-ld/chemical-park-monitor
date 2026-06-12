@@ -525,7 +525,7 @@ onMounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  background: url('https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20industrial%20factory%20interior%20with%20high-tech%20equipment%2C%20blurred%20background%2C%20clean%20lines%2C%20blue%20accents&image_size=landscape_16_9') center/cover no-repeat;
+  background: url('@/assets/images/background2.jpg') center/cover no-repeat;
   filter: blur(8px);
   z-index: 0;
   opacity: 0.3;
