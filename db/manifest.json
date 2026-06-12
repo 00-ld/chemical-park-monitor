@@ -1,0 +1,47 @@
+{
+  "database": "chemical",
+  "engine": "MySQL",
+  "charset": "utf8mb4",
+  "collation": "utf8mb4_general_ci",
+  "canonical_scripts": [
+    {
+      "path": "deploy/mysql/init.sql",
+      "type": "schema-and-seed",
+      "purpose": "Docker MySQL initialization entrypoint",
+      "maintainer_note": "Keep this file compatible with deploy/docker-compose.yml."
+    },
+    {
+      "path": "deploy/mysql/migration_add_role.sql",
+      "type": "migration",
+      "purpose": "Add role field to user table for admin/user authorization."
+    },
+    {
+      "path": "deploy/mysql/sensor_data.sql",
+      "type": "seed",
+      "purpose": "Seed sensor placement data based on the project layout plan."
+    },
+    {
+      "path": "Back/src/main/resources/schema-gas.sql",
+      "type": "schema-fragment",
+      "purpose": "Gas type table schema for backend local initialization."
+    },
+    {
+      "path": "Back/src/main/resources/schema-sensor.sql",
+      "type": "schema-fragment",
+      "purpose": "Sensor and sensor layout table schema for backend local initialization."
+    },
+    {
+      "path": "Back/src/main/resources/init-sensor-db.sql",
+      "type": "schema-and-seed-fragment",
+      "purpose": "Sensor-related backend local initialization."
+    }
+  ],
+  "do_not_commit": [
+    "production backups",
+    "raw database exports",
+    "real user data",
+    "plain-text passwords",
+    "API keys",
+    "token secrets"
+  ]
+}
