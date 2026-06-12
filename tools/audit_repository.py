@@ -42,6 +42,11 @@ RULES = [
         description="model weight or generated numerical array",
     ),
     Rule(
+        name="frontend-source-large-media",
+        pattern=re.compile(r"^frontend/src/.*\.(mp4|glb)$", re.IGNORECASE),
+        description="large media or 3D asset inside frontend source tree",
+    ),
+    Rule(
         name="environment-or-secret-file",
         pattern=re.compile(r"(^|/)(\.env|\.env\..*\.local|.*\.pem|.*\.key|.*\.p12)$", re.IGNORECASE),
         description="environment or secret-bearing file",
