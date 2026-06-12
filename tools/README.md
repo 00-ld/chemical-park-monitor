@@ -4,6 +4,7 @@
 
 ## 当前脚本
 
+- `audit_repository.py`：检查 Git 已跟踪文件是否包含旧目录、依赖缓存、构建产物、模型权重、真实环境文件等禁止提交内容。
 - `sensor_audit.py`：传感器相关数据和布局方案审计辅助脚本。
 
 ## 维护规则
@@ -18,6 +19,7 @@
 ## 运行建议
 
 ```bash
+python tools/audit_repository.py
 python tools/sensor_audit.py
 ```
 
