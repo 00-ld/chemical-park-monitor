@@ -149,19 +149,7 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive, nextTick, computed } from 'vue'
 import { ElMessage, ElForm } from 'element-plus'
-
-// 定义员工数据类型（适配化工园区场景）
-interface EmployeeItem {
-  id: number
-  name: string
-  age: number
-  gender: 0 | 1
-  phone: string
-  department: string
-  employeeId: number
-  status: '在岗' | '休假' | '离职'
-  jobDesc: string
-}
+import { initialEmployeeDirectory, type EmployeeItem } from '@/data/personnelDirectory'
 
 // 搜索表单
 const searchForm = ref({
@@ -170,24 +158,7 @@ const searchForm = ref({
   employeeId: undefined as number | undefined,
 })
 
-// 原始完整数据（15条化工园区员工固定数据）
-const allEmployeeList = ref<EmployeeItem[]>([
-  { id: 1, name: '李伟', age: 45, gender: 1, phone: '13800138001', department: '生产部', employeeId: 1001, status: '在岗', jobDesc: '负责化工生产线日常巡检，设备维护保养，确保生产安全运行' },
-  { id: 2, name: '张丽', age: 38, gender: 0, phone: '13800138002', department: '安全部', employeeId: 1002, status: '在岗', jobDesc: '制定安全管理制度，开展安全培训，排查园区安全隐患' },
-  { id: 3, name: '王强', age: 50, gender: 1, phone: '13800138003', department: '技术部', employeeId: 1003, status: '休假', jobDesc: '研发化工工艺优化方案，解决生产技术难题，指导现场操作' },
-  { id: 4, name: '刘芳', age: 35, gender: 0, phone: '13800138004', department: '质检部', employeeId: 1004, status: '在岗', jobDesc: '检测化工产品质量，记录检测数据，出具质量检验报告' },
-  { id: 5, name: '赵刚', age: 42, gender: 1, phone: '13800138005', department: '设备部', employeeId: 1005, status: '在岗', jobDesc: '管理生产设备台账，定期检修设备，保障设备正常运转' },
-  { id: 6, name: '孙梅', age: 39, gender: 0, phone: '13800138006', department: '行政部', employeeId: 1006, status: '离职', jobDesc: '负责园区行政事务，员工考勤管理，办公用品采购' },
-  { id: 7, name: '周军', age: 48, gender: 1, phone: '13800138007', department: '环保部', employeeId: 1007, status: '在岗', jobDesc: '监测园区排污情况，落实环保政策，处理环保投诉' },
-  { id: 8, name: '吴燕', age: 33, gender: 0, phone: '13800138008', department: '财务部', employeeId: 1008, status: '在岗', jobDesc: '核算生产成本，处理财务报销，编制财务报表' },
-  { id: 9, name: '郑涛', age: 46, gender: 1, phone: '13800138009', department: '仓储部', employeeId: 1009, status: '休假', jobDesc: '管理化工原料仓储，把控物料进出库，盘点库存数量' },
-  { id: 10, name: '钱丽', age: 37, gender: 0, phone: '13800138010', department: '采购部', employeeId: 1010, status: '在岗', jobDesc: '采购化工原料，洽谈供应商合作，控制采购成本' },
-  { id: 11, name: '冯伟', age: 44, gender: 1, phone: '13800138011', department: '销售部', employeeId: 1011, status: '在岗', jobDesc: '拓展化工产品市场，维护客户关系，完成销售指标' },
-  { id: 12, name: '陈静', age: 36, gender: 0, phone: '13800138012', department: '人事部', employeeId: 1012, status: '离职', jobDesc: '负责员工招聘，办理入职离职，组织员工培训' },
-  { id: 13, name: '褚亮', age: 41, gender: 1, phone: '13800138013', department: '工程部', employeeId: 1013, status: '在岗', jobDesc: '负责园区基建工程，维护园区基础设施，处理工程维修' },
-  { id: 14, name: '卫华', age: 49, gender: 1, phone: '13800138014', department: '应急部', employeeId: 1014, status: '在岗', jobDesc: '制定应急救援预案，组织应急演练，处理突发安全事件' },
-  { id: 15, name: '蒋欣', age: 34, gender: 0, phone: '13800138015', department: '研发部', employeeId: 1015, status: '休假', jobDesc: '开展新型化工产品研发，撰写研发报告，申请技术专利' }
-])
+const allEmployeeList = ref<EmployeeItem[]>(initialEmployeeDirectory.map(item => ({ ...item })))
 
 // 分页相关
 const page = ref(1)

@@ -161,17 +161,14 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick, computed } from 'vue'
 import { ElMessage, ElForm } from 'element-plus'
-
-// 定义化工厂管理员数据类型
-interface WorkerInfo {
-  id: number | undefined
-  name: string
-  age: number
-  gender: 1 | 2
-  phone: string
-  job: 1 | 2 | 3 | 4 | 5
-  status: '1' | '2'
-}
+import {
+  ADMINISTRATOR_JOB_LABELS,
+  ADMINISTRATOR_STATUS_LABELS,
+  initialAdministratorDirectory,
+  type AdministratorInfo,
+  type AdministratorJob,
+  type AdministratorStatus,
+} from '@/data/personnelDirectory'
 
 // 搜索表单
 const searchForm = reactive({
@@ -186,27 +183,10 @@ const pageInfo = reactive({
   pageSize: 10
 })
 
-// 原始完整数据（15条化工厂管理员固定数据）
-const allWorkerList = ref<WorkerInfo[]>([
-  { id: 1, name: '张伟', age: 45, gender: 1, phone: '13800138001', job: 1, status: '1' },
-  { id: 2, name: '李娜', age: 38, gender: 2, phone: '13800138002', job: 2, status: '1' },
-  { id: 3, name: '王磊', age: 42, gender: 1, phone: '13800138003', job: 3, status: '2' },
-  { id: 4, name: '刘芳', age: 36, gender: 2, phone: '13800138004', job: 4, status: '1' },
-  { id: 5, name: '赵强', age: 48, gender: 1, phone: '13800138005', job: 5, status: '1' },
-  { id: 6, name: '孙丽', age: 39, gender: 2, phone: '13800138006', job: 1, status: '2' },
-  { id: 7, name: '周明', age: 41, gender: 1, phone: '13800138007', job: 2, status: '1' },
-  { id: 8, name: '吴静', age: 37, gender: 2, phone: '13800138008', job: 3, status: '1' },
-  { id: 9, name: '郑涛', age: 44, gender: 1, phone: '13800138009', job: 4, status: '2' },
-  { id: 10, name: '钱颖', age: 35, gender: 2, phone: '13800138010', job: 5, status: '1' },
-  { id: 11, name: '冯军', age: 46, gender: 1, phone: '13800138011', job: 1, status: '1' },
-  { id: 12, name: '陈燕', age: 40, gender: 2, phone: '13800138012', job: 2, status: '2' },
-  { id: 13, name: '褚刚', age: 43, gender: 1, phone: '13800138013', job: 3, status: '1' },
-  { id: 14, name: '卫华', age: 34, gender: 2, phone: '13800138014', job: 4, status: '1' },
-  { id: 15, name: '蒋伟', age: 47, gender: 1, phone: '13800138015', job: 5, status: '2' }
-])
+const allWorkerList = ref<AdministratorInfo[]>(initialAdministratorDirectory.map(item => ({ ...item })))
 
 // 筛选后的数据（计算属性）
-const filteredWorkerList = computed<WorkerInfo[]>(() => {
+const filteredWorkerList = computed<AdministratorInfo[]>(() => {
   let result = [...allWorkerList.value]
   
   // 姓名筛选（模糊匹配）
@@ -229,7 +209,7 @@ const filteredWorkerList = computed<WorkerInfo[]>(() => {
 })
 
 // 分页后展示的数据（计算属性）
-const displayWorkerList = computed<WorkerInfo[]>(() => {
+const displayWorkerList = computed<AdministratorInfo[]>(() => {
   const start = (pageInfo.page - 1) * pageInfo.pageSize
   const end = start + pageInfo.pageSize
   return filteredWorkerList.value.slice(start, end)
@@ -245,7 +225,7 @@ const formRef = ref<InstanceType<typeof ElForm>>()
 const submitLoading = ref(false)
 
 // 表单数据
-const formData = reactive<WorkerInfo>({
+const formData = reactive<AdministratorInfo>({
   id: undefined,
   name: '',
   age: 0,
@@ -267,23 +247,12 @@ const rules = {
 
 // 职位标签映射（适配化工厂场景）
 const getJobLabel = (job: number) => {
-  const jobMap: Record<number, string> = {
-    1: '安全管理员',
-    2: '设备管理员',
-    3: '工艺管理员',
-    4: '环保管理员',
-    5: '质检管理员'
-  }
-  return jobMap[job] || '未知'
+  return ADMINISTRATOR_JOB_LABELS[job as AdministratorJob] || '未知'
 }
 
 // 状态标签映射
 const getStatusLabel = (status: string) => {
-  const statusMap: Record<string, string> = {
-    '1': '工作中',
-    '2': '空闲中'
-  }
-  return statusMap[status] || '未知'
+  return ADMINISTRATOR_STATUS_LABELS[status as AdministratorStatus] || '未知'
 }
 
 // 初始化加载
@@ -334,7 +303,7 @@ const handleAdd = () => {
 }
 
 // 编辑管理员
-const handleEdit = (row: WorkerInfo) => {
+const handleEdit = (row: AdministratorInfo) => {
   editMode.value = true
   Object.assign(formData, { ...row })
   dialogVisible.value = true
