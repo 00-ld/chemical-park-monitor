@@ -66,7 +66,7 @@ public class SensorLayoutController {
                 d.setY((Double) m.get("y"));
                 d.setInstallationHeight((Double) m.getOrDefault("installationHeight", 1.5));
                 d.setEffectiveRange((Double) m.getOrDefault("effectiveRange", 20.0));
-                d.setDetectionRange((String) m.getOrDefault("detectionRange", "CO / 可燃气体 / H2S / O2"));
+                d.setDetectionRange((String) m.getOrDefault("detectionRange", "CO / CH4 / NH3 / O2"));
                 d.setPriority((Integer) m.getOrDefault("priority", 2));
                 d.setRisk((Double) m.getOrDefault("risk", 0.3));
                 return d;

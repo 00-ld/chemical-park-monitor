@@ -73,6 +73,6 @@ CREATE TABLE IF NOT EXISTS `gas` (
 -- 初始数据：四气传感器
 INSERT IGNORE INTO `gas` (`id`, `name`, `detection_range`, `installation_height`, `effective_range`, `install_remark`, `priority`, `risk`) VALUES
 ('CO', '一氧化碳', '0-1000ppm', 1.5, 15, '高毒气体', 1, 0.90),
-('H2S', '硫化氢', '0-100ppm', 0.5, 12, '剧毒气体', 1, 0.95),
+('NH3', '氨气', '0-100ppm', 1.5, 20, '刺激性有毒气体', 1, 0.90),
 ('CH4', '甲烷', '0-100%LEL', 2.0, 18, '可燃气体', 2, 0.80),
 ('O2', '氧气', '0-30%VOL', 1.5, 15, '缺氧监测', 2, 0.30);
