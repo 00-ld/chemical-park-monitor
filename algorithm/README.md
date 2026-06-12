@@ -41,6 +41,7 @@ python -m uvicorn polo:app --host 127.0.0.1 --port 8001 --reload
 python -m py_compile api_server.py response_utils.py polo.py
 python -m diffusion.test_physical_invariants
 python -m diffusion.test_improved_formula
+python -m diffusion.test_calibration
 python -m diffusion.test_gaussian_validation
 ```
 
