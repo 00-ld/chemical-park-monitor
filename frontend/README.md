@@ -72,7 +72,7 @@ npm run build:pro
 常用变量：
 
 - `VITE_APP_BASE_API`
-- `VITE_ALGORITHM_API_BASE`
+- `VITE_ALGORITHM_BASE_API`
 - `VITE_IPORTAL_DASHBOARD_URL`
 
 ## 提交检查

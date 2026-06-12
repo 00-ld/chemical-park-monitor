@@ -4,21 +4,21 @@ import vue from '@vitejs/plugin-vue'
 import path from 'path'
 //引入svg需要用到插件
 import { createSvgIconsPlugin } from 'vite-plugin-svg-icons'
-//mock插件提供方法
-import { viteMockServe } from 'vite-plugin-mock'
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ mode }) => {
   //获取各种环境下的对应的变量
-  let env = loadEnv(mode, process.cwd());
+  const env = loadEnv(mode, process.cwd())
+  const appBaseApi = env.VITE_APP_BASE_API || '/api'
+  const appServer = env.VITE_SERVE || 'http://localhost:8081'
+  const algorithmBaseApi = env.VITE_ALGORITHM_BASE_API || '/algorithm-api'
+  const algorithmServer = env.VITE_ALGORITHM_SERVE || 'http://localhost:8000'
+
   return {
-    publicPath: 'https://gitee.com/jch1011/guiguzhenxuan',
-    plugins: [vue(),
-    createSvgIconsPlugin({
-      iconDirs: [path.resolve(process.cwd(), 'src/assets/icons')],
-      symbolId: 'icon-[dir]-[name]',
-    }),
-      // viteMockServe({
-      //   localEnabled: command === 'serve',//保证开发阶段可以使用mock接口
-      // })
+    plugins: [
+      vue(),
+      createSvgIconsPlugin({
+        iconDirs: [path.resolve(process.cwd(), 'src/assets/icons')],
+        symbolId: 'icon-[dir]-[name]',
+      }),
     ],
     resolve: {
       alias: {
@@ -37,16 +37,16 @@ export default defineConfig(({ command, mode }) => {
     //代理跨域
     server: {
       proxy: {
-        [env.VITE_APP_BASE_API]: {
+        [appBaseApi]: {
           //Java后端服务器地址
-          target: env.VITE_SERVE,
+          target: appServer,
           changeOrigin: true,
         },
-        [env.VITE_ALGORITHM_BASE_API || '/algorithm-api']: {
+        [algorithmBaseApi]: {
           //Python算法服务器地址
-          target: env.VITE_ALGORITHM_SERVE,
+          target: algorithmServer,
           changeOrigin: true,
-          rewrite: (path: string) => path.replace(/^\/algorithm-api/, ''),
+          rewrite: (path: string) => path.replace(algorithmBaseApi, ''),
         },
       }
     }
