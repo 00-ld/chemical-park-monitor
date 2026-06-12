@@ -14,7 +14,7 @@ public final class ApiResponseWriter {
     private ApiResponseWriter() {
     }
 
-    public static void write(HttpServletResponse response, int status, Result result) throws IOException {
+    public static void write(HttpServletResponse response, int status, Result<?> result) throws IOException {
         response.setStatus(status);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType("application/json;charset=UTF-8");

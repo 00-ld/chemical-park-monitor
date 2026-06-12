@@ -10,36 +10,43 @@ import java.util.UUID;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Result {
+public class Result<T> {
 
     private Integer code;
     private String message;
-    private Object data;
+    private T data;
     private boolean ok;
     private long timestamp;
     private String requestId;
 
-    public static Result success() {
+    public static Result<Void> success() {
         return build(200, "成功", null, true);
     }
 
-    public static Result success(Object data) {
+    public static <T> Result<T> success(T data) {
         return build(200, "成功", data, true);
     }
 
-    public static Result error(String message) {
+    public static Result<Void> error(String message) {
         return error(500, message);
     }
 
-    public static Result error(Integer code, String message) {
+    public static Result<Void> error(Integer code, String message) {
         return build(code, message, null, false);
     }
 
-    public static Result of(Integer code, String message, Object data) {
+    public static <T> Result<T> of(Integer code, String message, T data) {
         return build(code, message, data, code == 200);
     }
 
-    private static Result build(Integer code, String message, Object data, boolean ok) {
-        return new Result(code, message, data, ok, Instant.now().toEpochMilli(), UUID.randomUUID().toString());
+    private static <T> Result<T> build(Integer code, String message, T data, boolean ok) {
+        return new Result<>(
+                code,
+                message,
+                data,
+                ok,
+                Instant.now().toEpochMilli(),
+                UUID.randomUUID().toString()
+        );
     }
 }
