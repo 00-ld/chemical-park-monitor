@@ -9,10 +9,21 @@ const algorithmClient = axios.create({
 algorithmClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
+    const responseBody = error.response?.data
     const message = error.response?.status === 0
       ? '算法服务连接失败'
-      : error.response?.data?.error || '算法服务请求异常'
-    return { success: false, data: null, error: message, code: error.response?.status || 500 } as AlgorithmResponse
+      : responseBody?.message || responseBody?.error || '算法服务请求异常'
+
+    return {
+      code: error.response?.status || 500,
+      message,
+      data: null,
+      ok: false,
+      timestamp: Date.now(),
+      requestId: responseBody?.requestId,
+      success: false,
+      error: message,
+    } as AlgorithmResponse
   },
 )
 
