@@ -20,8 +20,6 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
-    "@supermap/iclient-leaflet": "^11.1.1",
-    "@types/three": "^0.178.1",
     "axios": "^1.3.5",
     "echarts": "^5.6.0",
     "echarts-liquidfill": "^3.1.0",
@@ -41,6 +39,7 @@
     "@commitlint/cli": "^17.5.1",
     "@commitlint/config-conventional": "^17.4.4",
     "@types/echarts": "^4.9.22",
+    "@types/three": "^0.178.1",
     "@typescript-eslint/eslint-plugin": "^5.57.1",
     "@typescript-eslint/parser": "^5.57.1",
     "@vitejs/plugin-vue": "^4.1.0",
