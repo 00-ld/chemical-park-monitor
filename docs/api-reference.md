@@ -128,6 +128,7 @@
 | POST | `/api/time-series` | 时序扩散模拟。 |
 | POST | `/api/inversion/coarse-search` | 泄漏源粗搜索。 |
 | POST | `/api/inversion/solve` | 泄漏源反演求解。 |
+| POST | `/api/inversion/particle-filter` | 粒子滤波泄漏源反演，输出位置、释放强度、置信区间和诊断指标。 |
 | POST | `/api/planning/evacuation` | D* Lite 疏散路径规划。 |
 
 ## 响应码说明
