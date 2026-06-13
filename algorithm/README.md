@@ -16,7 +16,7 @@
 ```text
 algorithm/
   diffusion/      气体扩散模型、公式基准、真实数据样本验证和物理不变量测试
-  inversion/      泄漏源反演、EKI/PINN 相关实现
+  inversion/      泄漏源反演、EKI/PINN、粒子滤波溯源相关实现
   planning/       D* Lite 逃生路径规划实现
   engine/         算法任务路由与统一调度入口
 ```
@@ -49,10 +49,13 @@ python -m diffusion.test_improved_formula
 python -m diffusion.test_calibration
 python -m diffusion.test_gaussian_validation
 python -m diffusion.test_real_prairie_grass
+python -m inversion.validate_particle_filter
 python test_path_hazard_avoidance.py
 ```
 
 真实数据样本验证使用 `datasets/samples/prairie_grass/PGrassOBSAnalysis.txt`，来源和边界见 `docs/dataset-sources.md`。该测试只验证横风向扩散宽度 `Sy (m)`，不得把它扩大解释为绝对浓度或完整事故级模型验证。
+
+`python -m inversion.validate_particle_filter` 会先复用 Prairie Grass 真实扩散宽度验证，再用可复现的高斯烟羽观测样本验证粒子滤波溯源定位、释放强度估计、噪声压力场景和多随机种子重复性。合成观测不得写成真实事故数据。
 
 ## 提交边界
 

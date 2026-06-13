@@ -144,6 +144,12 @@ async def pinn_inversion(data: Dict[str, Any]) -> Dict[str, Any]:
     return await run_engine_task({"task_type": "run_pinn_inversion", "payload": data})
 
 
+@app.post("/api/inversion/particle-filter", dependencies=[Depends(require_api_key)])
+async def particle_filter_inversion(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Quick-access endpoint for improved particle-filter source inversion."""
+    return await run_engine_task({"task_type": "run_particle_filter_inversion", "payload": data})
+
+
 @app.post("/api/planning/evacuation", dependencies=[Depends(require_api_key)])
 async def evacuation_planning(data: Dict[str, Any]) -> Dict[str, Any]:
     """Quick-access endpoint for evacuation planning."""

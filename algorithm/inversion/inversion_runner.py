@@ -14,6 +14,7 @@ from typing import Dict
 
 from .pinn_coarse_search import run_coarse_search
 from .pinn_dataset import normalize_inversion_payload
+from .particle_filter import run_particle_filter_inversion_task as run_improved_particle_filter_task
 from .source_inversion import run_two_stage_inversion
 
 
@@ -60,3 +61,17 @@ def run_pinn_inversion_task(payload: Dict) -> Dict:
         "implementation": "python.inversion.inversion_runner",
     }
     return result
+
+
+def run_particle_filter_inversion_task(payload: Dict) -> Dict:
+    """Run improved particle filtering for source-term estimation.
+
+    Args:
+        payload: Request payload with sensor observations, scenario, gas
+            metadata, and optional particleFilterConfig.
+
+    Returns:
+        Inversion result with source estimate, posterior intervals, diagnostics,
+        and optional error metrics when true source fields are supplied.
+    """
+    return run_improved_particle_filter_task(payload)

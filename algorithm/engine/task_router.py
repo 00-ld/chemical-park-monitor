@@ -12,7 +12,11 @@ from __future__ import annotations
 from typing import Dict
 
 from diffusion.diffusion_runner import run_diffusion_simulation_task
-from inversion.inversion_runner import run_pinn_coarse_search_task, run_pinn_inversion_task
+from inversion.inversion_runner import (
+    run_particle_filter_inversion_task,
+    run_pinn_coarse_search_task,
+    run_pinn_inversion_task,
+)
 from planning.evacuation_runner import run_evacuation_planning_task
 
 
@@ -25,6 +29,7 @@ def route_task(task_type: str, payload: Dict) -> Dict:
             - 'run_evacuation_planning'
             - 'run_pinn_coarse_search'
             - 'run_pinn_inversion'
+            - 'run_particle_filter_inversion'
         payload: Task-specific payload dictionary.
 
     Returns:
@@ -42,6 +47,8 @@ def route_task(task_type: str, payload: Dict) -> Dict:
             return run_pinn_coarse_search_task(payload)
         if task_type == "run_pinn_inversion":
             return run_pinn_inversion_task(payload)
+        if task_type == "run_particle_filter_inversion":
+            return run_particle_filter_inversion_task(payload)
         raise ValueError(f"Unsupported task type: '{task_type}'")
     except ValueError:
         raise
