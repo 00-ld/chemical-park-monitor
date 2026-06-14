@@ -4070,9 +4070,21 @@ function syncDiffusionSourceSelection() {
 
 const carGasToDiffusionGasMap = {
   '甲烷': 1,
+  '甲烷 CH₄': 1,
+  '可燃气体': 1,
   '氨气': 2,
+  '氨气 NH₃': 2,
   '一氧化碳': 3,
-  '氧气': 4
+  '一氧化碳 CO': 3,
+  '氧气': 4,
+  '氧气 O₂': 4,
+}
+
+function focusMapPoint(point) {
+  if (!point || !canvasEl) return
+  viewState.offsetX = (canvasEl.width * 0.45) / viewState.scale - point.x
+  viewState.offsetY = (canvasEl.height * 0.45) / viewState.scale - point.y
+  clampMapViewToCanvas()
 }
 
 function autoConfigFromCarParams() {
@@ -4082,7 +4094,13 @@ function autoConfigFromCarParams() {
     return
   }
   
-  showToast(`接收到小车 ${carId} 预警联动，正在自动配置扩散模型...`, 'success')
+  showToast(`接收到小车 ${carId} 预警联动，正在定位地图并配置扩散模型`, 'success')
+
+  const linkedCar = carStore.carList.find(car => String(car.id) === String(carId))
+  if (linkedCar) {
+    selectedCar.value = linkedCar
+    showCarInfo(linkedCar)
+  }
   
   if (gasType && carGasToDiffusionGasMap[gasType]) {
     diffusionForm.gasId = carGasToDiffusionGasMap[gasType]
@@ -4092,7 +4110,7 @@ function autoConfigFromCarParams() {
     const worldX = Number(x)
     const worldY = Number(y)
     
-    leakSourceState.mode = 'manual'
+    leakSourceState.mode = 'map'
     leakSourceState.mapPoint = { x: worldX, y: worldY }
     leakSourceState.manualLongitude = worldX.toString()
     leakSourceState.manualLatitude = worldY.toString()
@@ -4103,9 +4121,11 @@ function autoConfigFromCarParams() {
     })
     
     syncManualGeoInputsFromWorld(leakSourceState.mapPoint)
+    focusMapPoint(leakSourceState.mapPoint)
   }
   
-  showToast('扩散模型已自动配置，请点击"扩散模拟"按钮运行', 'success')
+  render()
+  showToast('联动点位已定位，可直接运行扩散模拟或查看小车详情', 'success')
 }
 
 async function runDiffusionSimulation(options = {}) {

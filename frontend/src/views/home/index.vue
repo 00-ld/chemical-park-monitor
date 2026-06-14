@@ -100,6 +100,34 @@
       </el-card>
     </div>
 
+    <el-card class="workflow-card" shadow="hover">
+      <template #header>
+        <div class="card-header-wrapper">
+          <span class="card-title">联动处置</span>
+          <el-button type="text" class="more-btn" @click="goToManage()">查看全部预警</el-button>
+        </div>
+      </template>
+      <div v-if="latestWarning" class="workflow-body">
+        <div class="workflow-main">
+          <div class="workflow-kicker">最新预警</div>
+          <div class="workflow-title">
+            {{ latestWarning.areaName || '未知区域' }} · {{ formatGasType(latestWarning.gasType) }}
+          </div>
+          <div class="workflow-meta">
+            小车 {{ latestWarning.carId || '--' }} |
+            坐标 X {{ latestWarning.x }} / Y {{ latestWarning.y }} |
+            浓度 {{ latestWarning.gasValue }}{{ normalizeGasType(latestWarning.gasType) === 'O2' ? '%VOL' : 'ppm' }}
+          </div>
+        </div>
+        <div class="workflow-actions">
+          <el-button type="primary" @click="openWarningInMap(latestWarning)">地图定位</el-button>
+          <el-button type="success" @click="openWarningInCar(latestWarning)">调度智巡</el-button>
+          <el-button type="warning" @click="openWarningInYolo(latestWarning)">AI 复核</el-button>
+        </div>
+      </div>
+      <div v-else class="workflow-empty">暂无预警事件，系统处于稳定监测状态。</div>
+    </el-card>
+
     <!-- 快捷操作 + 公告区 -->
     <div class="shortcut-announce-group">
       <el-card class="shortcut-card" shadow="hover">
@@ -199,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
@@ -252,6 +280,17 @@ const normalizeGasType = (gasType: string | null | undefined) => {
   return ''
 }
 
+const formatGasType = (gasType: string | null | undefined) => {
+  const labelMap: Record<string, string> = {
+    CO: '一氧化碳 CO',
+    O2: '氧气 O₂',
+    NH3: '氨气 NH₃',
+    CH4: '甲烷 CH₄',
+  }
+  const normalized = normalizeGasType(gasType)
+  return labelMap[normalized] || String(gasType || '--')
+}
+
 // 响应式变量
 const cardHover = ref(false)
 const hoverIndex = ref(-1)
@@ -271,6 +310,7 @@ const clickedAnnounceIndex = ref(-1)
 
 // 预警历史数据（从/history/list获取，对应warning_history表）
 const historyList = ref<HistoryItem[]>([])
+const latestWarning = computed(() => historyList.value[0] || null)
 
 // 公告列表数据
 const announceList = ref<AnnounceItem[]>([
@@ -320,6 +360,39 @@ const fetchHistory = async () => {
   }
 }
 
+const buildWarningQuery = (item: HistoryItem) => ({
+  warningId: String(item.id ?? ''),
+  carId: String(item.carId || ''),
+  gasType: formatGasType(item.gasType),
+  x: String(item.x ?? ''),
+  y: String(item.y ?? ''),
+  source: 'home',
+})
+
+const openWarningInMap = (item: HistoryItem) => {
+  router.push({
+    path: '/smart-map',
+    query: {
+      ...buildWarningQuery(item),
+      autoConfig: 'true',
+    },
+  })
+}
+
+const openWarningInCar = (item: HistoryItem) => {
+  router.push({
+    path: '/car/home',
+    query: buildWarningQuery(item),
+  })
+}
+
+const openWarningInYolo = (item: HistoryItem) => {
+  router.push({
+    path: '/yolo',
+    query: buildWarningQuery(item),
+  })
+}
+
 // 页面跳转函数 - 快捷操作
 const goToInspect = () => {
   shortcutLoading.value.inspect = true
@@ -361,7 +434,7 @@ const goToMapTest = () => {
   shortcutLoading.value.map = true
   setTimeout(() => {
     shortcutLoading.value.map = false
-    router.push({ name: 'MapTest' })
+    router.push({ path: '/smart-map', query: { source: 'home-shortcut' } })
     ElMessage.success('进入智慧地图页面')
   }, 800)
 }
@@ -776,6 +849,57 @@ onMounted(() => {
   flex-direction: column;
   padding: 20px;
 }
+
+.workflow-card {
+  background: rgba(16, 25, 43, 0.78);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid rgba(64, 224, 208, 0.22);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.workflow-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.workflow-main {
+  min-width: 0;
+}
+
+.workflow-kicker {
+  color: #40e0d0;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.workflow-title {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.workflow-meta {
+  color: #a0cfff;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.workflow-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.workflow-empty {
+  color: #a0cfff;
+  font-size: 14px;
+}
+
 .shortcut-announce-group {
   display: grid;
   grid-template-columns: 2fr 1fr;

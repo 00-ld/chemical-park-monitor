@@ -162,8 +162,29 @@
                 {{ formatTime(scope.row.warningTime) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" align="center" width="130">
+            <el-table-column label="联动操作" align="center" width="300" fixed="right">
               <template #default="scope">
+                <el-button
+                    type="primary"
+                    size="small"
+                    @click="openWarningInMap(scope.row)"
+                >
+                  地图定位
+                </el-button>
+                <el-button
+                    type="success"
+                    size="small"
+                    @click="openWarningInCar(scope.row)"
+                >
+                  调度智巡
+                </el-button>
+                <el-button
+                    type="warning"
+                    size="small"
+                    @click="openWarningInYolo(scope.row)"
+                >
+                  AI复核
+                </el-button>
                 <el-button
                     type="danger"
                     size="small"
@@ -776,6 +797,39 @@ const formatGasType = (gasType: string) => {
   }
   const normalized = normalizeGasType(gasType)
   return gasMap[normalized] || gasType
+}
+
+const buildWarningQuery = (item: HistoryItem) => ({
+  warningId: String(item.id ?? ''),
+  carId: String(item.carId || ''),
+  gasType: formatGasType(item.gasType),
+  x: String(item.x ?? ''),
+  y: String(item.y ?? ''),
+  source: 'history',
+})
+
+const openWarningInMap = (item: HistoryItem) => {
+  router.push({
+    path: '/smart-map',
+    query: {
+      ...buildWarningQuery(item),
+      autoConfig: 'true',
+    },
+  })
+}
+
+const openWarningInCar = (item: HistoryItem) => {
+  router.push({
+    path: '/car/home',
+    query: buildWarningQuery(item),
+  })
+}
+
+const openWarningInYolo = (item: HistoryItem) => {
+  router.push({
+    path: '/yolo',
+    query: buildWarningQuery(item),
+  })
 }
 
 // 格式化时间
