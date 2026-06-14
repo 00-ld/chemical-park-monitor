@@ -18,12 +18,6 @@
       </div>
     </header>
 
-    <div v-if="linkedWarning" class="linked-warning-strip">
-      <span>联动复核</span>
-      <strong>小车 {{ linkedWarning.carId || '--' }} · {{ linkedWarning.gasType || '未知气体' }}</strong>
-      <em>坐标 X {{ linkedWarning.x || '--' }} / Y {{ linkedWarning.y || '--' }}</em>
-    </div>
-
     <el-row :gutter="15" class="screen-body">
       <el-col :span="6">
         <div class="data-box panel-left-top">
@@ -126,7 +120,6 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   UploadFilled,
@@ -140,8 +133,6 @@ import {
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
-
-const route = useRoute()
 
 interface DetectionLog {
   id: number
@@ -174,17 +165,6 @@ const imageQueue = ref<File[]>([])
 const currentIndex = ref(0)
 const detectionLogs = ref<DetectionLog[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
-const linkedWarning = computed(() => {
-  if (!route.query.warningId && !route.query.carId) return null
-  return {
-    warningId: String(route.query.warningId || ''),
-    carId: String(route.query.carId || ''),
-    gasType: String(route.query.gasType || ''),
-    x: String(route.query.x || ''),
-    y: String(route.query.y || ''),
-  }
-})
-
 let pollingTimer: ReturnType<typeof setTimeout> | null = null
 
 const gaugeRef = ref<HTMLElement | null>(null)
@@ -427,33 +407,6 @@ onMounted(() => {
   color: #3a5a85;
   text-align: center;
   letter-spacing: 1px;
-}
-
-.linked-warning-strip {
-  margin: 0 0 12px;
-  padding: 10px 14px;
-  border: 1px solid rgba(0, 242, 254, 0.28);
-  background: rgba(6, 30, 61, 0.82);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  color: #a0cfff;
-}
-
-.linked-warning-strip span {
-  color: #00f2fe;
-  font-size: 12px;
-}
-
-.linked-warning-strip strong {
-  color: #fff;
-  font-size: 14px;
-}
-
-.linked-warning-strip em {
-  font-style: normal;
-  font-size: 12px;
 }
 
 .data-box {

@@ -162,29 +162,8 @@
                 {{ formatTime(scope.row.warningTime) }}
               </template>
             </el-table-column>
-            <el-table-column label="联动操作" align="center" width="300" fixed="right">
+            <el-table-column label="操作" align="center" width="120" fixed="right">
               <template #default="scope">
-                <el-button
-                    type="primary"
-                    size="small"
-                    @click="openWarningInMap(scope.row)"
-                >
-                  地图定位
-                </el-button>
-                <el-button
-                    type="success"
-                    size="small"
-                    @click="openWarningInCar(scope.row)"
-                >
-                  调度智巡
-                </el-button>
-                <el-button
-                    type="warning"
-                    size="small"
-                    @click="openWarningInYolo(scope.row)"
-                >
-                  AI复核
-                </el-button>
                 <el-button
                     type="danger"
                     size="small"
@@ -784,7 +763,6 @@ const normalizeGasType = (gasType: string | null | undefined) => {
   if (raw.includes('O2') || raw.includes('O₂') || raw.includes('氧气')) return 'O2'
   if (raw.includes('NH3') || raw.includes('NH₃') || raw.includes('氨')) return 'NH3'
   if (raw.includes('CH4') || raw.includes('CH₄') || raw.includes('甲烷') || raw.includes('可燃')) return 'CH4'
-  if (raw.includes('H2S') || raw.includes('H₂S') || raw.includes('硫化氢')) return 'NH3'
   return raw
 }
 
@@ -797,39 +775,6 @@ const formatGasType = (gasType: string) => {
   }
   const normalized = normalizeGasType(gasType)
   return gasMap[normalized] || gasType
-}
-
-const buildWarningQuery = (item: HistoryItem) => ({
-  warningId: String(item.id ?? ''),
-  carId: String(item.carId || ''),
-  gasType: formatGasType(item.gasType),
-  x: String(item.x ?? ''),
-  y: String(item.y ?? ''),
-  source: 'history',
-})
-
-const openWarningInMap = (item: HistoryItem) => {
-  router.push({
-    path: '/smart-map',
-    query: {
-      ...buildWarningQuery(item),
-      autoConfig: 'true',
-    },
-  })
-}
-
-const openWarningInCar = (item: HistoryItem) => {
-  router.push({
-    path: '/car/home',
-    query: buildWarningQuery(item),
-  })
-}
-
-const openWarningInYolo = (item: HistoryItem) => {
-  router.push({
-    path: '/yolo',
-    query: buildWarningQuery(item),
-  })
 }
 
 // 格式化时间

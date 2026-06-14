@@ -4067,67 +4067,6 @@ function syncDiffusionSourceSelection() {
   return fallbackValidation
 }
 
-
-const carGasToDiffusionGasMap = {
-  '甲烷': 1,
-  '甲烷 CH₄': 1,
-  '可燃气体': 1,
-  '氨气': 2,
-  '氨气 NH₃': 2,
-  '一氧化碳': 3,
-  '一氧化碳 CO': 3,
-  '氧气': 4,
-  '氧气 O₂': 4,
-}
-
-function focusMapPoint(point) {
-  if (!point || !canvasEl) return
-  viewState.offsetX = (canvasEl.width * 0.45) / viewState.scale - point.x
-  viewState.offsetY = (canvasEl.height * 0.45) / viewState.scale - point.y
-  clampMapViewToCanvas()
-}
-
-function autoConfigFromCarParams() {
-  const { carId, gasType, x, y, autoConfig } = route.query
-  
-  if (autoConfig !== 'true' || !carId) {
-    return
-  }
-  
-  showToast(`接收到小车 ${carId} 预警联动，正在定位地图并配置扩散模型`, 'success')
-
-  const linkedCar = carStore.carList.find(car => String(car.id) === String(carId))
-  if (linkedCar) {
-    selectedCar.value = linkedCar
-    showCarInfo(linkedCar)
-  }
-  
-  if (gasType && carGasToDiffusionGasMap[gasType]) {
-    diffusionForm.gasId = carGasToDiffusionGasMap[gasType]
-  }
-  
-  if (x && y) {
-    const worldX = Number(x)
-    const worldY = Number(y)
-    
-    leakSourceState.mode = 'map'
-    leakSourceState.mapPoint = { x: worldX, y: worldY }
-    leakSourceState.manualLongitude = worldX.toString()
-    leakSourceState.manualLatitude = worldY.toString()
-    
-    updateDiffusionMetaSource({
-      sourceFacility: null,
-      sourcePoint: leakSourceState.mapPoint,
-    })
-    
-    syncManualGeoInputsFromWorld(leakSourceState.mapPoint)
-    focusMapPoint(leakSourceState.mapPoint)
-  }
-  
-  render()
-  showToast('联动点位已定位，可直接运行扩散模拟或查看小车详情', 'success')
-}
-
 async function runDiffusionSimulation(options = {}) {
   if (diffusionState.running) return
   if (!currentLeakSourcePoint.value) {
@@ -5603,9 +5542,6 @@ onMounted(() => {
   // 初始化气象数据；真实天气后续通过后端代理接入
   initializeWeatherData()
 
-  setTimeout(() => {
-    autoConfigFromCarParams()
-  }, 500)
 })
 
 watch(viewMode, (mode) => {
@@ -5673,11 +5609,6 @@ watch(() => diffusionForm.sourceFacilityId, () => {
   })
 })
 
-watch(() => route.query.autoConfig, (newVal) => {
-  if (newVal === 'true') {
-    autoConfigFromCarParams()
-  }
-})
 watch(() => selectedFacility.value?.id, (nextId, previousId) => {
   if (nextId === previousId) return
   if (evacuationPlanningMode.value === 'all' && evacuationBuildingRoutes.value.length) {

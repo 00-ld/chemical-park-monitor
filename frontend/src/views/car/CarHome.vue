@@ -3,20 +3,6 @@
     <!-- 背景图片 -->
     <div class="background-image"></div>
 
-    <div v-if="linkedWarning" class="linked-warning-card">
-      <div>
-        <div class="linked-kicker">来自{{ linkedWarning.source === 'home' ? '首页' : '预警历史' }}的联动事件</div>
-        <div class="linked-title">
-          小车 {{ linkedWarning.carId || '--' }} · {{ linkedWarning.gasType || '未知气体' }}
-        </div>
-        <div class="linked-meta">坐标 X {{ linkedWarning.x || '--' }} / Y {{ linkedWarning.y || '--' }}</div>
-      </div>
-      <div class="linked-actions">
-        <el-button type="primary" size="small" @click="openLinkedWarningMap">地图定位</el-button>
-        <el-button type="warning" size="small" @click="openLinkedWarningYolo">AI复核</el-button>
-      </div>
-    </div>
-
     <el-tabs v-model="activeTab" class="integrated-tabs" @tab-click="handleTabClick">
       <!-- ========== Tab 1: 小车总览 ========== -->
       <el-tab-pane label="小车总览" name="overview">
@@ -320,7 +306,7 @@
               <div class="action-icon">💨</div>
               <div class="action-text">
                 <div class="action-title">模拟扩散</div>
-                <div class="action-desc">跳转扩散模拟并自动配置</div>
+                <div class="action-desc">打开扩散模拟页面</div>
               </div>
             </button>
           </div>
@@ -365,18 +351,6 @@ const router = useRouter()
 const route = useRoute()
 const carStore = useCarStore()
 
-const linkedWarning = computed(() => {
-  if (!route.query.warningId && !route.query.carId) return null
-  return {
-    warningId: String(route.query.warningId || ''),
-    carId: String(route.query.carId || ''),
-    gasType: String(route.query.gasType || ''),
-    x: String(route.query.x || ''),
-    y: String(route.query.y || ''),
-    source: String(route.query.source || 'history'),
-  }
-})
-
 // ========== 通用 ==========
 const activeTab = ref('overview')
 const REAL_MAP_WIDTH = 1587.2
@@ -416,13 +390,6 @@ const gasType = {
   4: '氧气 O₂'
 }
 
-const gasTypeMapping = {
-  1: '甲烷',
-  2: '氨气',
-  3: '一氧化碳',
-  4: '氧气'
-}
-
 // ========== Tab 切换处理 ==========
 const handleTabClick = () => {
   if (activeTab.value === 'overview') {
@@ -459,29 +426,6 @@ const goToSmartMap = () => {
 
 const goToYoloMonitor = () => {
   router.push('/yolo')
-}
-
-const openLinkedWarningMap = () => {
-  if (!linkedWarning.value) return
-  router.push({
-    path: '/smart-map',
-    query: {
-      ...linkedWarning.value,
-      autoConfig: 'true',
-      source: 'car',
-    },
-  })
-}
-
-const openLinkedWarningYolo = () => {
-  if (!linkedWarning.value) return
-  router.push({
-    path: '/yolo',
-    query: {
-      ...linkedWarning.value,
-      source: 'car',
-    },
-  })
 }
 
 // ========== 真实二维地图加载状态 ==========
@@ -556,17 +500,7 @@ const handleSimulateDiffusion = async () => {
     await carStore.setCarWarning(selectedCarId.value!)
     nextTick(() => { initCharts() })
 
-    const car = carList.value.find(c => c.id === selectedCarId.value)!
-    router.push({
-      path: '/smart-map',
-      query: {
-        carId: selectedCarId.value!,
-        gasType: gasTypeMapping[selectedCarId.value!],
-        x: car.x,
-        y: car.y,
-        autoConfig: 'true'
-      }
-    })
+    router.push('/smart-map')
 
     closeWarningDialog()
   } catch (error) {
@@ -797,45 +731,6 @@ onUnmounted(() => {
 .home-container > * {
   position: relative;
   z-index: 1;
-}
-
-.linked-warning-card {
-  width: min(100% - 48px, 1712px);
-  margin: 0 auto 14px;
-  padding: 14px 18px;
-  border: 1px solid rgba(64, 224, 208, 0.28);
-  border-radius: 8px;
-  background: rgba(10, 25, 50, 0.82);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-}
-
-.linked-kicker {
-  color: #40e0d0;
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-
-.linked-title {
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.linked-meta {
-  color: #a0cfff;
-  font-size: 12px;
-  margin-top: 4px;
-}
-
-.linked-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 /* ===== Tabs ===== */
