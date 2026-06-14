@@ -22,6 +22,8 @@
       </div>
     </div>
 
+    <WarningContextBar class="monitor-warning-bar" />
+
     <!-- 中间主体 -->
     <div class="main-body">
 
@@ -181,6 +183,8 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
+import WarningContextBar from '@/components/WarningContextBar/index.vue'
+import { getCurrentWarningContext, normalizeGasType } from '@/utils/warningContext'
 
 // 发射异常状态给父组件
 const emit = defineEmits(['monitor-status'])
@@ -235,6 +239,21 @@ const hasGasAlarm = computed(() => {
 })
 
 const hasAlarm = computed(() => hasGasAlarm.value)
+
+const applyLinkedWarningData = () => {
+  const context = getCurrentWarningContext(route.query)
+  if (!context?.gasType) return
+
+  const value = parseFloat(String(context.gasValue || ''))
+  if (Number.isNaN(value)) return
+
+  const gasType = normalizeGasType(context.gasType)
+  if (gasType === 'CH4') gasData.value.methane = value.toFixed(2)
+  if (gasType === 'NH3') gasData.value.nh3 = value.toFixed(1)
+  if (gasType === 'CO') gasData.value.co = value.toFixed(2)
+  if (gasType === 'O2') gasData.value.oxygen = value.toFixed(1)
+  updateSafeValue()
+}
 
 // 安全指数
 const updateSafeValue = () => {
@@ -299,6 +318,11 @@ const getTime = () => {
 
 const startAutoUpdate = () => {
   dataTimer = setInterval(() => {
+    if (getCurrentWarningContext(route.query)?.warningId) {
+      applyLinkedWarningData()
+      return
+    }
+
     gasData.value = {
       methane: (0.18 + Math.random()*0.12).toFixed(2),
       nh3: (10 + Math.random()*25).toFixed(1),
@@ -331,6 +355,7 @@ onMounted(() => {
   timeTimer = setInterval(getTime, 1000)
   startAutoUpdate()
   updateSafeValue()
+  applyLinkedWarningData()
 
   const cams = [
     {id:1,name:'北区储罐区',url:'/gas_video/气体1.mp4'},
@@ -354,7 +379,8 @@ onUnmounted(() => {
   height: 100vh;
   background: #050d25;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: #fff;
   font-family: "Microsoft YaHei", sans-serif;
 }
@@ -415,7 +441,14 @@ onUnmounted(() => {
   justify-content: center;
   gap: 24px;
   padding: 30px 40px;
-  height: calc(100vh - 80px);
+  min-height: calc(100vh - 80px);
+}
+
+.monitor-warning-bar {
+  position: relative;
+  z-index: 10;
+  width: calc(100% - 80px);
+  margin: 14px 40px 0;
 }
 
 .left-panel,

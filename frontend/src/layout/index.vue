@@ -68,6 +68,7 @@
 
     <!-- 内容区域 -->
     <main class="layout_main">
+      <WarningContextBar />
       <Main />
     </main>
   </div>
@@ -82,6 +83,8 @@ import Main from './main/index.vue'
 import Logo from './logo/index.vue'
 import Tabbar from './tabbar/index.vue'
 import useUserStore from '@/store/modules/user'
+import WarningContextBar from '@/components/WarningContextBar/index.vue'
+import { getCurrentWarningContext, withWarningQuery } from '@/utils/warningContext'
 
 defineOptions({
   name: 'Layout',
@@ -113,7 +116,23 @@ const handleMenuSelect = (index: string) => {
     return
   }
 
-  $router.push(index).catch((err) => console.warn('菜单跳转失败:', err))
+  const context = getCurrentWarningContext($route.query)
+  const linkedTargets = [
+    '/home',
+    '/screen',
+    '/smart-map',
+    '/thing/monitor_history',
+    '/car/home',
+    '/yolo',
+    '/acl/role',
+    '/acl/employee',
+  ]
+
+  const target = context && linkedTargets.includes(index)
+    ? { path: index, query: withWarningQuery({}, context, 'menu') }
+    : index
+
+  $router.push(target).catch((err) => console.warn('菜单跳转失败:', err))
 }
 </script>
 
