@@ -205,7 +205,7 @@ import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { Refresh, Clock, Check } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import request from '@/utils/request'
 
 // 初始化路由
 const router = useRouter()
@@ -233,10 +233,24 @@ interface AnnounceItem {
   content: string
 }
 
-const request = axios.create({
-  baseURL: import.meta.env.VITE_APP_BASE_API || '/api',
-  timeout: 5000,
-})
+const GAS_TYPE_ORDER = ['CO', 'O2', 'NH3', 'CH4']
+const GAS_TYPE_LABELS: Record<string, string> = {
+  CO: 'CO',
+  O2: 'O2',
+  NH3: 'NH3',
+  CH4: 'CH4',
+}
+
+const normalizeGasType = (gasType: string | null | undefined) => {
+  const raw = String(gasType || '').trim().toUpperCase()
+  if (!raw) return ''
+  if (raw.includes('CO') || raw.includes('一氧化碳')) return 'CO'
+  if (raw.includes('O2') || raw.includes('O₂') || raw.includes('氧气')) return 'O2'
+  if (raw.includes('NH3') || raw.includes('NH₃') || raw.includes('氨')) return 'NH3'
+  if (raw.includes('CH4') || raw.includes('CH₄') || raw.includes('甲烷') || raw.includes('可燃')) return 'CH4'
+  if (raw.includes('H2S') || raw.includes('H₂S') || raw.includes('硫化氢')) return 'NH3'
+  return ''
+}
 
 // 响应式变量
 const cardHover = ref(false)
@@ -294,8 +308,8 @@ const formatTime = (timeStr: string | Date) => {
 const fetchHistory = async () => {
   try {
     const res = await request.get('/history/list')
-    if (res.data.code === 200) {
-      historyList.value = res.data.data.sort((a: HistoryItem, b: HistoryItem) =>
+    if (res.code === 200) {
+      historyList.value = res.data.sort((a: HistoryItem, b: HistoryItem) =>
           new Date(b.warningTime).getTime() - new Date(a.warningTime).getTime()
       )
       updateAlarmChart()
@@ -406,11 +420,14 @@ const initAlarmTypeChart = () => {
     const data = historyList.value
     const countMap: Record<string, number> = {}
     data.forEach(item => {
-      const name = item.gasType || '未知类型'
-      countMap[name] = (countMap[name] || 0) + 1
+      const gasType = normalizeGasType(item.gasType)
+      if (!gasType) return
+      countMap[gasType] = (countMap[gasType] || 0) + 1
     })
 
-    const seriesData = Object.entries(countMap).map(([name, value]) => ({ name, value }))
+    const seriesData = GAS_TYPE_ORDER
+        .filter((gasType) => countMap[gasType] > 0)
+        .map((gasType) => ({ name: GAS_TYPE_LABELS[gasType], value: countMap[gasType] }))
     const finalData = seriesData.length ? seriesData : [{ name: '暂无数据', value: 1 }]
 
     const alarmOption: EChartsOption = {

@@ -15,3 +15,92 @@
     background-color: rgb(105, 105, 105);
     border-radius: 10px;
 }
+
+/* Font Awesome 未作为依赖安装时，为旧页面的 fas/fa-* 图标提供本地兜底。 */
+.fas {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1em;
+    min-width: 1em;
+    height: 1em;
+    line-height: 1;
+    font-family: "Segoe UI Symbol", "Microsoft YaHei", sans-serif;
+    font-style: normal;
+    font-weight: 700;
+    vertical-align: -0.08em;
+}
+
+.fas::before {
+    content: "•";
+}
+
+.fa-search::before { content: "⌕"; }
+.fa-smog::before { content: "≋"; }
+.fa-bullseye::before { content: "◎"; }
+.fa-ban::before { content: "⊘"; }
+.fa-location-crosshairs::before,
+.fa-crosshairs::before { content: "⌖"; }
+.fa-earth-asia::before,
+.fa-map-marked-alt::before { content: "◇"; }
+.fa-spinner::before { content: "◌"; }
+.fa-play::before { content: "▶"; }
+.fa-pause::before { content: "Ⅱ"; }
+.fa-route::before { content: "↝"; }
+.fa-people-arrows-left-right::before { content: "↔"; }
+.fa-road-circle-xmark::before { content: "⊗"; }
+.fa-file-waveform::before,
+.fa-wave-square::before { content: "∿"; }
+.fa-download::before { content: "↓"; }
+.fa-upload::before { content: "↑"; }
+.fa-rotate-left::before { content: "↺"; }
+.fa-brain::before { content: "∴"; }
+.fa-bolt::before { content: "ϟ"; }
+.fa-eraser::before { content: "⌫"; }
+.fa-chart-pie::before { content: "◔"; }
+.fa-palette::before { content: "◒"; }
+.fa-mouse-pointer::before { content: "↖"; }
+.fa-door-open::before { content: "▣"; }
+.fa-ruler::before { content: "⌁"; }
+.fa-eye::before { content: "◉"; }
+.fa-circle::before { content: "○"; }
+.fa-backward-step::before { content: "◀"; }
+.fa-forward-step::before { content: "▶"; }
+.fa-plus::before { content: "+"; }
+.fa-minus::before { content: "−"; }
+.fa-expand::before { content: "⛶"; }
+.fa-tag::before { content: "⌑"; }
+.fa-times::before,
+.fa-xmark::before { content: "×"; }
+.fa-pen::before,
+.fa-edit::before,
+.fa-pen-to-square::before { content: "✎"; }
+.fa-copy::before { content: "⧉"; }
+.fa-minus-circle::before { content: "⊖"; }
+.fa-flask::before { content: "⚗"; }
+.fa-bell::before { content: "◍"; }
+.fa-cloud-sun::before { content: "☼"; }
+.fa-microchip::before { content: "▦"; }
+.fa-signal::before { content: "▥"; }
+.fa-shoe-prints::before { content: "⌇"; }
+.fa-building-shield::before { content: "▤"; }
+.fa-list-ol::before { content: "≡"; }
+.fa-check::before,
+.fa-check-circle::before,
+.fa-circle-check::before { content: "✓"; }
+.fa-chevron-up::before { content: "⌃"; }
+.fa-chevron-down::before { content: "⌄"; }
+.fa-trash::before { content: "⌧"; }
+.fa-paste::before { content: "▣"; }
+.fa-save::before { content: "▣"; }
+.fa-book-open::before { content: "□"; }
+.fa-shield-halved::before { content: "◈"; }
+.fa-exclamation-triangle::before { content: "!"; }
+
+.fa-spin {
+    animation: fa-local-spin 0.9s linear infinite;
+}
+
+@keyframes fa-local-spin {
+    to { transform: rotate(360deg); }
+}

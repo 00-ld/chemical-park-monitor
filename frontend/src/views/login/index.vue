@@ -1,11 +1,8 @@
 <template>
   <div class="login-container">
-    <!-- 背景动态光效层 -->
     <div class="background-light"></div>
-    <!-- 背景遮罩层 -->
     <div class="mask-layer"></div>
 
-    <!-- 左侧主题标识（已大幅美化） -->
     <div class="theme-logo">
       <div class="logo-icon-wrapper">
         <div class="logo-icon">
@@ -15,68 +12,65 @@
       </div>
 
       <div class="logo-title-group">
-        <div class="logo-title">智监溯源</div>
-        <div class="logo-subtitle">多源多模态化工园区气体监控与溯源系统</div>
-        <div class="logo-desc">
-          智能监测 · 精准溯源 · 安全预警 · 全域管控
-        </div>
+        <div class="logo-title">智慧溯源</div>
+        <div class="logo-subtitle">多源化工园区气体监测系统</div>
+        <div class="logo-desc">监测 · 溯源 · 预警 · 园区管控</div>
       </div>
     </div>
 
-    <!-- 右侧登录框 -->
     <div class="login-box">
       <div class="login-header">
         <div class="login-title">
           <span>系统登录</span>
         </div>
-        <div class="login-subtitle">欢迎使用多源多模态化工园区气体监控与溯源系统</div>
+        <div class="login-subtitle">欢迎使用化工园区气体监测系统</div>
       </div>
 
       <el-form ref="loginForms" :rules="rules" :model="loginForm" class="login-form">
         <el-form-item prop="username" class="form-item">
           <div class="input-label">账号</div>
           <el-input
-              size="large"
-              v-model="loginForm.username"
-              :prefix-icon="User"
-              placeholder="请输入登录账号"
-              class="login-input"
-              :class="{ 'input-focus': isUsernameFocus }"
-              @focus="isUsernameFocus = true"
-              @blur="isUsernameFocus = false"
+            size="large"
+            v-model="loginForm.username"
+            :prefix-icon="User"
+            placeholder="请输入账号"
+            class="login-input"
+            :class="{ 'input-focus': isUsernameFocus }"
+            @focus="isUsernameFocus = true"
+            @blur="isUsernameFocus = false"
           />
         </el-form-item>
 
         <el-form-item prop="password" class="form-item">
           <div class="input-label">密码</div>
           <el-input
-              show-password
-              size="large"
-              v-model="loginForm.password"
-              :prefix-icon="Lock"
-              placeholder="请输入登录密码"
-              class="login-input"
-              :class="{ 'input-focus': isPasswordFocus }"
-              @focus="isPasswordFocus = true"
-              @blur="isPasswordFocus = false"
+            show-password
+            size="large"
+            v-model="loginForm.password"
+            :prefix-icon="Lock"
+            placeholder="请输入密码"
+            class="login-input"
+            :class="{ 'input-focus': isPasswordFocus }"
+            @focus="isPasswordFocus = true"
+            @blur="isPasswordFocus = false"
           />
         </el-form-item>
 
         <el-form-item class="login-btn-item">
           <el-button
-              type="primary"
-              size="large"
-              style="width:100%"
-              @click="login"
-              class="login-btn"
-              :loading="loading"
+            type="primary"
+            size="large"
+            style="width:100%"
+            @click="login"
+            class="login-btn"
+            :loading="loading"
           >
-            登录系统
+            登录
           </el-button>
         </el-form-item>
 
         <div class="register-tip">
-          还没有账号？请<a @click="goRegister">立即注册</a>
+          还没有账号？<a @click="goRegister">立即注册</a>
         </div>
       </el-form>
     </div>
@@ -84,109 +78,100 @@
 </template>
 
 <script setup lang="ts" name="Login">
-import { User, Lock } from '@element-plus/icons-vue';
-import { reactive, ref } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-import { ElNotification } from 'element-plus';
-import useUserStore from '@/store/modules/user';
+import { User, Lock } from '@element-plus/icons-vue'
+import { reactive, ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElNotification } from 'element-plus'
+import useUserStore from '@/store/modules/user'
 
-const userStore = useUserStore();
+const userStore = useUserStore()
 
 const getTime = () => {
-  const hour = new Date().getHours();
-  if (hour < 6) return '凌晨';
-  if (hour < 9) return '早上';
-  if (hour < 12) return '上午';
-  if (hour < 14) return '中午';
-  if (hour < 18) return '下午';
-  if (hour < 22) return '晚上';
-  return '深夜';
-};
+  const hour = new Date().getHours()
+  if (hour < 6) return '夜间好'
+  if (hour < 12) return '早上好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+}
 
-const loginForms = ref();
-const $router = useRouter();
-const $route = useRoute();
+const loginForms = ref()
+const $router = useRouter()
+const $route = useRoute()
 
-const loading = ref(false);
-const isUsernameFocus = ref(false);
-const isPasswordFocus = ref(false);
+const loading = ref(false)
+const isUsernameFocus = ref(false)
+const isPasswordFocus = ref(false)
 
 interface LoginForm {
-  username: string;
-  password: string;
+  username: string
+  password: string
 }
 
 const loginForm = reactive<LoginForm>({
   username: '',
-  password: ''
-});
+  password: '',
+})
 
 const validatorUserName = (_rule: any, value: string, callback: (error?: Error) => void) => {
   if (value.length >= 5) {
-    callback();
+    callback()
   } else {
-    callback(new Error('账号长度至少五位'));
+    callback(new Error('账号长度不能少于 5 位'))
   }
-};
+}
 
 const validatorPassword = (_rule: any, value: string, callback: (error?: Error) => void) => {
   if (value.length >= 6) {
-    callback();
+    callback()
   } else {
-    callback(new Error('密码长度至少六位'));
+    callback(new Error('密码长度不能少于 6 位'))
   }
-};
+}
 
 const rules = {
-  username: [
-    { trigger: 'change', validator: validatorUserName },
-  ],
-  password: [
-    { trigger: 'change', validator: validatorPassword },
-  ]
-};
+  username: [{ trigger: 'change', validator: validatorUserName }],
+  password: [{ trigger: 'change', validator: validatorPassword }],
+}
 
 const login = async () => {
   try {
-    await loginForms.value.validate();
+    await loginForms.value.validate()
   } catch (error) {
     ElNotification({
       type: 'warning',
-      message: '表单验证失败，请检查输入内容',
-      title: '提示'
-    });
-    return;
+      message: '请检查账号和密码',
+      title: '校验未通过',
+    })
+    return
   }
 
-  loading.value = true;
+  loading.value = true
 
   try {
-    // 走 store 的 userLogin：内部会写入内存与本地存储(TOKEN)，保持单一数据源
-    await userStore.userLogin(loginForm);
+    await userStore.userLogin(loginForm)
     ElNotification({
       type: 'success',
       message: '登录成功，正在进入系统...',
-      title: `HI, ${getTime()}好`,
-    });
-    const redirect = $route.query.redirect as string | undefined;
-    $router.push({ path: redirect || '/home' });
+      title: getTime(),
+    })
+    const redirect = $route.query.redirect as string | undefined
+    $router.push({ path: redirect || '/home' })
   } catch (error: any) {
-    ElNotification.error(error?.message || '登录失败');
+    ElNotification.error(error?.message || '登录失败')
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
 const goRegister = () => {
-  $router.push({ path: '/register' });
-};
+  $router.push({ path: '/register' })
+}
 </script>
-
 <style scoped>
 .login-container {
   height: 100vh;
   overflow: hidden;
-  background-image: url("/登录背景图.png");
+  background-image: url("/%E7%99%BB%E5%BD%95%E8%83%8C%E6%99%AF%E5%9B%BE.png");
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;

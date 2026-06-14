@@ -115,8 +115,9 @@
             <button class="sensor-btn primary" @click="applyManualGeoLeakSource">
               <i class="fas fa-earth-asia"></i> 应用经纬度源点
             </button>
-            <button class="sensor-btn primary" @click="runDiffusionSimulation()">
-              <i class="fas fa-play"></i> 扩散模拟
+            <button class="sensor-btn primary" :disabled="diffusionState.running" @click="runDiffusionSimulation()">
+              <i :class="diffusionState.running ? 'fas fa-spinner fa-spin' : 'fas fa-play'"></i>
+              {{ diffusionState.running ? '正在模拟' : '扩散模拟' }}
             </button>
             <button class="sensor-btn primary" @click="runEvacuationPlanning()">
               <i class="fas fa-route"></i> 当前建筑路径
@@ -254,8 +255,19 @@
             @wheel.prevent="onCanvasWheel"
         ></canvas>
 
-        <div class="coord-display">
-          经度: <span>{{ coordLongitude }}</span> &nbsp; 纬度: <span>{{ coordLatitude }}</span> &nbsp; 海拔: <span>{{ coordAltitude }}</span>
+        <div class="coord-display" aria-live="polite">
+          <span class="coord-item">
+            <span class="coord-label">经度</span>
+            <strong>{{ coordLongitude }}</strong>
+          </span>
+          <span class="coord-item">
+            <span class="coord-label">纬度</span>
+            <strong>{{ coordLatitude }}</strong>
+          </span>
+          <span class="coord-item">
+            <span class="coord-label">海拔</span>
+            <strong>{{ coordAltitude }}</strong>
+          </span>
         </div>
 
         <div v-if="hoveredSensorCard" class="sensor-hover-card">
@@ -282,9 +294,6 @@
           <button class="tool-btn" :class="{ active: !measureMode }" @click="setTool('select')">
             <i class="fas fa-mouse-pointer"></i> 选择
           </button>
-          <button class="tool-btn" :class="{ active: showFlow }" @click="toggleFlow">
-            <i class="fas fa-water"></i> 流向
-          </button>
           <button class="tool-btn" :class="{ active: showEntrances }" @click="toggleEntrances">
             <i class="fas fa-door-open"></i> 出入口
           </button>
@@ -296,9 +305,6 @@
           </button>
           <button class="tool-btn" :class="{ active: showSensorRanges }" @click="toggleSensorRanges">
             <i class="fas fa-circle"></i> 半径范围
-          </button>
-          <button class="tool-btn" @click="runEndToEndPipeline" title="全流程联动：巡逻→采样→PINN溯源">
-            <i class="fas fa-play-circle"></i> 全流程
           </button>
         </div>
 
@@ -392,7 +398,7 @@
                 <span>YOLO 检测结果</span>
                 <span>{{ yoloResult.count }} 人</span>
               </div>
-              <img v-if="yoloResult.imageBase64" :src="'data:image/png;base64,' + yoloResult.imageBase64" class="yolo-result-img" />
+              <img v-if="yoloResult.imageBase64" :src="normalizeYoloImage(yoloResult.imageBase64)" class="yolo-result-img" />
               <div class="yolo-result-time">{{ new Date(yoloResult.timestamp).toLocaleTimeString() }} 检测</div>
             </div>
             <div v-if="selectedFacility?.type === 'tank' && selectedFacility.level != null" class="info-row">
@@ -1251,6 +1257,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import request from '@/utils/request'
 import {
   PHASE1_DEFAULT_SCENARIO,
   PHASE1_GASES,
@@ -1272,22 +1279,25 @@ import {
 } from '@/data/gasSourceCatalog'
 import { clamp, formatGeoCoord, geoToWorld, worldToGeo } from '@/data/coordinate'
 import {
+  getSensorDevice,
+  sensorTypes,
+} from '@/data/parkAssets'
+import {
+  REAL_MAP,
   alerts,
   buildingEntrances,
+  dataBoundary,
   facilities,
   facilityById,
   getFacilityAnchorPoint,
-  groundSpeckles,
   keyAreas,
   legends,
   parkEntrances,
   pipes,
   roads,
-  sensorTypes,
-  getSensorDevice,
   stats,
   zones,
-} from '@/data/parkAssets'
+} from '@/data/realMapAssets'
 import { CAR_PATROL_ROUTES } from '@/data/carPatrolRoutes'
 
 import { useCarStore } from '@/store/carStore'
@@ -1299,18 +1309,20 @@ const carStore = useCarStore()
 const mapCanvasRef = ref(null)
 const mapContainerRef = ref(null)
 const clock = ref('--:--:--')
-const coordLongitude = ref('118.780°E')
-const coordLatitude = ref('32.040°N')
+const coordLongitude = ref('118.780000°E')
+const coordLatitude = ref('32.040000°N')
 const coordAltitude = ref('18.0m')
 const isDragging = ref(false)
-const showLabels = ref(true)
+const showLabels = ref(false)
 const showHeatmap = ref(false)
-const showFlow = ref(false)
 const showEntrances = ref(false)
 const showSensors = ref(true)
 const showSensorRanges = ref(true)
 const viewMode = ref<'2d' | '3d'>('2d')
 const scene3DRef = ref<InstanceType<typeof ParkScene3D>>()
+const realMapImage = new Image()
+realMapImage.src = REAL_MAP.image
+realMapImage.onload = () => render()
 // 预加载传感器设备图片
 const sensorDeviceImageCache = new Map()
 function getSensorDeviceImage(sensor) {
@@ -1342,7 +1354,6 @@ const toastIcon = ref('fas fa-check-circle')
 const viewState = reactive({ offsetX:0, offsetY:0, scale:1, dragging:false, lastX:0, lastY:0 })
 const zoomLevel = computed(() => viewState.scale.toFixed(1))
 
-let flowAnimOffset = 0
 let measurePoints = []
 let animFrameId = 0
 let ctx = null
@@ -1422,47 +1433,6 @@ function toggleCarPatrol() {
   render()
 }
 
-
-async function runEndToEndPipeline() {
-  if (!diffusionFrames.value.length) {
-    showToast('请先运行扩散模拟，生成浓度场数据', 'warn')
-    return
-  }
-  showToast('=== 全流程联动启动 ===', 'success')
-  
-  // Step 1: 启动小车巡逻
-  if (!carPatrolEnabled.value) {
-    toggleCarPatrol()
-  }
-  
-  // Step 2: 等待小车采集数据（模拟3秒巡逻）
-  showToast('小车正在巡逻采样气体数据...', 'success')
-  await new Promise(resolve => setTimeout(resolve, 3000))
-  syncCarMobileSensors()
-  
-  // Step 3: 执行 PINN 粗搜索（融合静态+动态传感器）
-  showToast('执行 PINN 粗搜索，融合静态传感器 + 移动传感器数据...', 'success')
-  await runPinnCoarseSearchPreview()
-  if (!coarseSearchResult.value?.candidateRegions?.length) {
-    showToast('PINN 粗搜索未找到候选区域', 'warn')
-    return
-  }
-  showToast(`粗搜索完成，找到 ${coarseSearchResult.value.candidateRegions.length} 个候选区域`, 'success')
-  
-  // Step 4: 自动选中最佳候选区域
-  if (coarseCandidateRegions.value.length) {
-    const best = coarseCandidateRegions.value[0]
-    selectCoarseCandidate(best.candidateId, true)
-    showToast(`最佳候选区域: ${best.label} (评分: ${best.score.toFixed(3)})`, 'success')
-  }
-  
-  // Step 5: 执行 PINN 精修
-  showToast('执行 PINN 精修，精确定位泄漏源...', 'success')
-  await runMockPinnRefinementPreview()
-  
-  showToast('=== 全流程联动完成 ===', 'success')
-  showToast('泄漏源已定位，请查看扩散模拟结果', 'success')
-}
 function refreshCarData() {
   // 巡逻时跳过 DB 轮询（避免覆盖移动位置）
   if (carPatrolEnabled.value) {
@@ -1524,12 +1494,12 @@ const triggerYoloForCar = async (carId) => {
   if (!car) return
   showToast(`小车 ${carId} YOLO 检测中...`, 'success')
   try {
-    // Capture canvas area around the car
+    // 截取小车周边画布区域作为 YOLO 输入图。
     const rect = canvasEl.getBoundingClientRect()
     const s = viewState.scale
     const ox = viewState.offsetX * s + canvasEl.width * 0.05
     const oy = viewState.offsetY * s + canvasEl.height * 0.05
-    // Convert world coords to screen coords
+    // 将小车世界坐标换算为画布屏幕坐标。
     const sx = car.x * s + ox
     const sy = car.y * s + oy
     const snapSize = 150
@@ -1546,27 +1516,35 @@ const triggerYoloForCar = async (carId) => {
       const formData = new FormData()
       formData.append('file', blob, `car_${carId}_capture.png`)
       try {
-        const res = await fetch((import.meta.env.VITE_APP_BASE_API || '/api') + '/analysis/person', { method: 'POST', body: formData })
-        const responseBody = await res.json()
+        const responseBody = await request.post('/analysis/person', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 90000,
+        })
         const data = responseBody?.data || responseBody
         if (data.status === 'success') {
           yoloResult.value = { carId, count: data.count, imageBase64: data.image_base64, timestamp: Date.now() }
           showToast(`小车 ${carId} 检测到 ${data.count} 人`, 'success')
-          // Update the car info panel with YOLO result
+          // 将 YOLO 结果同步到右侧小车信息面板。
           if (selectedCar.value?.id === carId) {
             showCarInfo(selectedCar.value)
           }
           render()
         } else {
-          showToast('YOLO 检测未返回结果', 'warn')
+          showToast(data?.message || 'YOLO 检测未返回结果', 'warn')
         }
       } catch (err) {
-        showToast('YOLO API 请求失败，请确认后端服务已启动', 'warn')
+        showToast(`YOLO API 请求失败：${err?.response?.data?.message || err?.message || '请确认后端服务已启动'}`, 'warn')
       }
     }, 'image/png')
   } catch (err) {
     showToast('YOLO 检测失败: ' + err.message, 'warn')
   }
+}
+
+function normalizeYoloImage(imageBase64) {
+  if (!imageBase64) return ''
+  if (String(imageBase64).startsWith('data:image/')) return imageBase64
+  return `data:image/jpeg;base64,${imageBase64}`
 }
 // 切换小车预警状态
 const toggleCarWarning = async (id) => {
@@ -1668,6 +1646,7 @@ const diffusionMeta = ref({
 const diffusionState = reactive({
   currentFrame: 0,
   playing: false,
+  running: false,
   loop: true,
   speed: 1,
   accumulatorMs: 0,
@@ -2024,10 +2003,11 @@ let lastAnimTime = 0
 /** 从后端加载所有已保存的传感器 */
 async function fetchSensorsFromDB() {
   try {
-    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/list`)
-    const data = await resp.json()
-    if (data.code === 200 && Array.isArray(data.data)) {
-      sensors.value = buildActiveSensorSeries(data.data, diffusionFrames.value)
+    const resp = await request.get('/sensor/list')
+    if (resp.code === 200 && Array.isArray(resp.data)) {
+      sensors.value = buildActiveSensorSeries(resp.data, diffusionFrames.value)
+      computeRiskGrid()
+      calcCoverage()
       render()
     }
   } catch (err) {
@@ -2038,10 +2018,7 @@ async function fetchSensorsFromDB() {
 /** 保存传感器到后端 */
 async function saveSensorToDB(sensor) {
   try {
-    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/add`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const result = await request.post('/sensor/add', {
         id: sensor.id,
         x: sensor.x,
         y: sensor.y,
@@ -2054,9 +2031,7 @@ async function saveSensorToDB(sensor) {
         type: sensor.type || 'gas',
         mode: sensor.mode || 'auto',
         lastSampleTime: sensor.lastSampleTime,
-      })
     })
-    const result = await resp.json()
     if (result.code === 200) {
       return true
     } else {
@@ -2072,10 +2047,7 @@ async function saveSensorToDB(sensor) {
 /** 更新传感器参数到后端 */
 async function updateSensorToDB(sensor) {
   try {
-    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const result = await request.post('/sensor/update', {
         id: sensor.id,
         x: sensor.x,
         y: sensor.y,
@@ -2088,9 +2060,7 @@ async function updateSensorToDB(sensor) {
         type: sensor.type || 'gas',
         mode: sensor.mode || 'auto',
         lastSampleTime: sensor.lastSampleTime,
-      })
     })
-    const result = await resp.json()
     if (result.code !== 200) {
       console.warn('更新传感器到数据库失败:', result.message)
     }
@@ -2102,12 +2072,7 @@ async function updateSensorToDB(sensor) {
 /** 从后端删除传感器 */
 async function deleteSensorFromDB(id) {
   try {
-    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/sensor/delete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id })
-    })
-    const result = await resp.json()
+    const result = await request.post('/sensor/delete', { id })
     if (result.code !== 200) {
       console.warn('从数据库删除传感器失败:', result.message)
     }
@@ -2128,10 +2093,9 @@ async function deleteAllSensorsFromDB() {
 /** 从后端加载气体类型列表 */
 async function fetchGasList() {
   try {
-    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/list`)
-    const data = await resp.json()
-    if (data.code === 200 && Array.isArray(data.data)) {
-      gases.value = data.data
+    const resp = await request.get('/gas/list')
+    if (resp.code === 200 && Array.isArray(resp.data)) {
+      gases.value = resp.data
     }
   } catch (err) {
     console.warn('从数据库加载气体类型失败:', err.message)
@@ -2141,12 +2105,7 @@ async function fetchGasList() {
 /** 保存气体类型到后端 */
 async function saveGasToDB(gas) {
   try {
-    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/add`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(gas)
-    })
-    const result = await resp.json()
+    const result = await request.post('/gas/add', gas)
     if (result.code === 200) {
       await fetchGasList()
     } else {
@@ -2160,12 +2119,7 @@ async function saveGasToDB(gas) {
 /** 更新气体类型到后端 */
 async function updateGasToDB(gas) {
   try {
-    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(gas)
-    })
-    const result = await resp.json()
+    const result = await request.post('/gas/update', gas)
     if (result.code === 200) {
       await fetchGasList()
     } else {
@@ -2179,12 +2133,7 @@ async function updateGasToDB(gas) {
 /** 从后端删除气体类型 */
 async function deleteGasFromDB(id) {
   try {
-    const resp = await fetch(`${import.meta.env.VITE_APP_BASE_API || '/api'}/gas/delete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id })
-    })
-    const result = await resp.json()
+    const result = await request.post('/gas/delete', { id })
     if (result.code === 200) {
       await fetchGasList()
     }
@@ -2311,15 +2260,15 @@ async function saveGasDraft() {
  * 注意：此处不是严格工程验收级布点，而是将泄漏源距离、设备状态、风向和最小间距作为仿真布点规则
  */
 const SENSOR_LAYOUT_CONFIG = {
-  maxSensors: 25,
-  minSensorDistance: 120,
+  maxSensors: 60,
+  minSensorDistance: 80,
   highRiskThreshold: 0.55,
   sourceInfluenceRadius: 180,
   downwindBonus: 0.35,
   alertBonus: 0.35,
   maintenanceBonus: 0.15,
   // 高风险区（储罐区/塔器区）允许的较密间距
-  highDensityMinDistance: 70
+  highDensityMinDistance: 45
 }
 
 /**
@@ -2805,8 +2754,8 @@ function normalizeMapPoint(point) {
 function syncManualGeoInputsFromWorld(point) {
   if (!point) return
   const geo = worldToGeo(point.x, point.y)
-  leakSourceState.manualLongitude = geo.longitude.toFixed(3)
-  leakSourceState.manualLatitude = geo.latitude.toFixed(3)
+  leakSourceState.manualLongitude = geo.longitude.toFixed(6)
+  leakSourceState.manualLatitude = geo.latitude.toFixed(6)
 }
 function buildLeakSourceValidation() {
   const gasId = diffusionForm.gasId
@@ -3119,6 +3068,7 @@ function drawCars() {
 
 function render() {
   if (!ctx) return
+  clampMapViewToCanvas()
   ctx.fillStyle = '#1a2e1e'
   ctx.fillRect(0, 0, canvasEl.width, canvasEl.height)
   const s = viewState.scale
@@ -3126,15 +3076,10 @@ function render() {
   ctx.translate(viewState.offsetX * s + canvasEl.width * 0.05, viewState.offsetY * s + canvasEl.height * 0.05)
   ctx.scale(s, s)
   drawGround()
-  drawRoads()
   drawDiffusionLayer()
   drawPinnCandidateRegions()
   drawPinnRefinementOverlay()
   drawKeyAreas()
-  drawPipes()
-  drawBuildings()
-  drawTanks()
-  drawTowers()
   drawEvacuationRoute()
   drawRiskGrid()
   drawSensors()
@@ -3150,27 +3095,14 @@ function render() {
 }
 
 function drawGround() {
-  ctx.fillStyle = '#16261a'
-  ctx.fillRect(15, 15, 990, 630)
-  ctx.fillStyle = '#1a2e1e'
-  ctx.fillRect(20, 20, 980, 620)
-  ctx.fillStyle = '#1d3322'
-  for (const dot of groundSpeckles) {
-    ctx.beginPath()
-    ctx.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2)
-    ctx.fill()
+  ctx.fillStyle = '#070921'
+  ctx.fillRect(dataBoundary.x, dataBoundary.y, dataBoundary.w, dataBoundary.h)
+  if (realMapImage.complete && realMapImage.naturalWidth > 0) {
+    ctx.drawImage(realMapImage, 0, 0, REAL_MAP.width, REAL_MAP.height)
   }
-  const zoneBgs = [
-    { x:78, y:55, w:247, h:170, color:'#1e2826' },
-    { x:355, y:55, w:320, h:170, color:'#1e2826' },
-    { x:705, y:55, w:240, h:170, color:'#1e2826' },
-    { x:78, y:255, w:247, h:165, color:'#1c2630' },
-    { x:355, y:255, w:320, h:165, color:'#231e28' },
-    { x:355, y:452, w:320, h:143, color:'#1e2428' },
-    { x:705, y:452, w:240, h:143, color:'#22251e' },
-    { x:78, y:452, w:247, h:143, color:'#1a2430' },
-  ]
-  zoneBgs.forEach(z => { ctx.fillStyle = z.color; ctx.fillRect(z.x, z.y, z.w, z.h) })
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+  ctx.lineWidth = 1 / Math.max(viewState.scale, 0.1)
+  ctx.strokeRect(dataBoundary.x, dataBoundary.y, dataBoundary.w, dataBoundary.h)
 }
 function drawRoads() {
   roads.forEach(r => {
@@ -3216,18 +3148,32 @@ function drawPipes() {
     ctx.strokeStyle = p.status === '运行中' ? '#6a7a8a' : '#4a5a6a'
     ctx.lineWidth = 3; ctx.lineCap = 'round'
     ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(mx, fy); ctx.lineTo(mx, ty); ctx.lineTo(tx, ty); ctx.stroke()
-    if (showFlow.value && p.status === '运行中') {
-      ctx.strokeStyle = 'rgba(56,189,248,0.5)'
-      ctx.lineWidth = 2; ctx.setLineDash([4, 8]); ctx.lineDashOffset = -flowAnimOffset
-      ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(mx, fy); ctx.lineTo(mx, ty); ctx.lineTo(tx, ty); ctx.stroke()
-      ctx.setLineDash([]); ctx.lineDashOffset = 0
-      ctx.save(); ctx.translate(tx, ty)
-      ctx.rotate(mx < tx ? 0 : Math.PI)
-      ctx.fillStyle = 'rgba(56,189,248,0.7)'
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-8, -4); ctx.lineTo(-8, 4); ctx.closePath(); ctx.fill()
-      ctx.restore()
-    }
   })
+}
+function getFacilityBounds(f) {
+  const hasRect = Number.isFinite(f.x) && Number.isFinite(f.y) && Number.isFinite(f.w) && Number.isFinite(f.h)
+  if (hasRect) {
+    return {
+      x: f.x,
+      y: f.y,
+      w: f.w,
+      h: f.h,
+      cx: f.x + f.w / 2,
+      cy: f.y + f.h / 2,
+      r: Math.max(8, Math.min(f.w, f.h) / 2),
+    }
+  }
+  const r = Number.isFinite(f.r) ? f.r : 20
+  const h = Number.isFinite(f.h) ? f.h : r * 2
+  return {
+    x: f.x - r,
+    y: f.y - h / 2,
+    w: r * 2,
+    h,
+    cx: f.x,
+    cy: f.y,
+    r,
+  }
 }
 function drawBuildings() {
   const typeColors = { office:'#5a4a3a', production:'#3a5a4a', utility:'#3a4a5a', warehouse:'#4a4a3a', treatment:'#2a4a5a' }
@@ -3248,7 +3194,21 @@ function drawBuildings() {
 function drawTanks() {
   facilities.filter(f => f.type === 'tank').forEach(f => {
     if (!matchFilter(f)) return
-    const { x: cx, y: cy, r } = f
+    const { x, y, w, h, cx, cy, r } = getFacilityBounds(f)
+    if (Number.isFinite(f.w) && Number.isFinite(f.h)) {
+      ctx.fillStyle = 'rgba(0,0,0,0.2)'
+      ctx.fillRect(x + 3, y + 3, w, h)
+      const grad = ctx.createLinearGradient(x, y, x + w, y + h)
+      grad.addColorStop(0, 'rgba(138,154,184,0.52)')
+      grad.addColorStop(0.7, 'rgba(90,106,131,0.38)')
+      grad.addColorStop(1, 'rgba(58,74,90,0.32)')
+      ctx.fillStyle = grad
+      ctx.fillRect(x, y, w, h)
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)'
+      ctx.lineWidth = 1 / Math.max(viewState.scale, 0.1)
+      ctx.strokeRect(x, y, w, h)
+      return
+    }
     ctx.fillStyle = 'rgba(0,0,0,0.2)'
     ctx.beginPath(); ctx.arc(cx + 2, cy + 2, r, 0, Math.PI * 2); ctx.fill()
     const grad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r)
@@ -3273,7 +3233,18 @@ function drawTanks() {
 function drawTowers() {
   facilities.filter(f => f.type === 'tower').forEach(f => {
     if (!matchFilter(f)) return
-    const { x: cx, y: cy, r, h } = f
+    const bounds = getFacilityBounds(f)
+    const { x: cx, y: cy, r, h } = Number.isFinite(f.r) ? f : bounds
+    if (!Number.isFinite(f.r)) {
+      ctx.fillStyle = 'rgba(0,0,0,0.2)'
+      ctx.fillRect(bounds.x + 3, bounds.y + 3, bounds.w, bounds.h)
+      ctx.fillStyle = 'rgba(138,106,138,0.36)'
+      ctx.fillRect(bounds.x, bounds.y, bounds.w, bounds.h)
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)'
+      ctx.lineWidth = 1 / Math.max(viewState.scale, 0.1)
+      ctx.strokeRect(bounds.x, bounds.y, bounds.w, bounds.h)
+      return
+    }
     const topY = cy - h / 2, botY = cy + h / 2
     const topW = r * 0.85, botW = r
     ctx.fillStyle = 'rgba(0,0,0,0.2)'
@@ -3310,10 +3281,9 @@ function drawLabels() {
   ctx.textAlign = 'center'; ctx.textBaseline = 'top'
   facilities.forEach(f => {
     if (!matchFilter(f)) return
-    let lx, ly
-    if (f.type === 'tank') { lx = f.x; ly = f.y + f.r + 4 }
-    else if (f.type === 'tower') { lx = f.x; ly = f.y + f.h / 2 + f.r + 8 }
-    else { lx = f.x + f.w / 2; ly = f.y + f.h + 4 }
+    const bounds = getFacilityBounds(f)
+    const lx = bounds.cx
+    const ly = bounds.y + bounds.h + 4
     const tw = ctx.measureText(f.name).width
     ctx.fillStyle = '#0a0f1a'
     ctx.fillRect(lx - tw / 2 - 3, ly - 1, tw + 6, 13)
@@ -3337,10 +3307,7 @@ function drawLabels() {
 }
 function drawHeatmap() {
   facilities.forEach(f => {
-    let cx, cy
-    if (f.type === 'tank') { cx = f.x; cy = f.y }
-    else if (f.type === 'tower') { cx = f.x; cy = f.y }
-    else { cx = f.x + (f.w || 0) / 2; cy = f.y + (f.h || 0) / 2 }
+    const { cx, cy } = getFacilityBounds(f)
     let heat = 0.3
     if (f.temp != null) heat = Math.min(1, Math.max(0.1, f.temp / 250))
     if (f.status === '告警') heat = 0.9
@@ -3632,22 +3599,22 @@ function drawEstimatedSourceIcon(estimatedSource, emphasized) {
 }
 function drawSelection(f) {
   ctx.strokeStyle = '#00e5a0'; ctx.lineWidth = 2; ctx.setLineDash([4, 3])
-  if (f.type === 'tank') { ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 6, 0, Math.PI * 2); ctx.stroke() }
-  else if (f.type === 'tower') { ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r + 8, f.h / 2 + 8, 0, 0, Math.PI * 2); ctx.stroke() }
-  else { ctx.strokeRect(f.x - 4, f.y - 4, f.w + 8, f.h + 8) }
+  const bounds = getFacilityBounds(f)
+  if (Number.isFinite(f.r) && f.type === 'tank') { ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 6, 0, Math.PI * 2); ctx.stroke() }
+  else if (Number.isFinite(f.r) && f.type === 'tower') { ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r + 8, f.h / 2 + 8, 0, 0, Math.PI * 2); ctx.stroke() }
+  else { ctx.strokeRect(bounds.x - 4, bounds.y - 4, bounds.w + 8, bounds.h + 8) }
   ctx.setLineDash([])
-  let cx, cy
-  if (f.type === 'tank') { cx = f.x; cy = f.y - f.r - 20 }
-  else if (f.type === 'tower') { cx = f.x; cy = f.y - f.h / 2 - 20 }
-  else { cx = f.x + f.w / 2; cy = f.y - 15 }
+  const cx = bounds.cx
+  const cy = bounds.y - 15
   ctx.fillStyle = 'rgba(0,229,160,0.9)'; ctx.font = 'bold 10px "Noto Sans SC"'
   ctx.textAlign = 'center'; ctx.fillText(f.name, cx, cy)
 }
 function drawHover(f) {
   ctx.strokeStyle = 'rgba(56,189,248,0.6)'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3])
-  if (f.type === 'tank') { ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 5, 0, Math.PI * 2); ctx.stroke() }
-  else if (f.type === 'tower') { ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r + 6, f.h / 2 + 6, 0, 0, Math.PI * 2); ctx.stroke() }
-  else { ctx.strokeRect(f.x - 3, f.y - 3, f.w + 6, f.h + 6) }
+  const bounds = getFacilityBounds(f)
+  if (Number.isFinite(f.r) && f.type === 'tank') { ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 5, 0, Math.PI * 2); ctx.stroke() }
+  else if (Number.isFinite(f.r) && f.type === 'tower') { ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r + 6, f.h / 2 + 6, 0, 0, Math.PI * 2); ctx.stroke() }
+  else { ctx.strokeRect(bounds.x - 3, bounds.y - 3, bounds.w + 6, bounds.h + 6) }
   ctx.setLineDash([])
 }
 function drawMeasure() {
@@ -3681,13 +3648,14 @@ function hitTest(wx, wy) {
   for (let i = facilities.length - 1; i >= 0; i--) {
     const f = facilities[i]
     if (!matchFilter(f)) continue
-    if (f.type === 'tank') {
+    const bounds = getFacilityBounds(f)
+    if (Number.isFinite(f.r) && f.type === 'tank') {
       const dx = wx - f.x, dy = wy - f.y
       if (dx * dx + dy * dy <= f.r * f.r) return f
-    } else if (f.type === 'tower') {
+    } else if (Number.isFinite(f.r) && f.type === 'tower') {
       if (Math.abs(wx - f.x) <= f.r && wy >= f.y - f.h / 2 && wy <= f.y + f.h / 2) return f
     } else {
-      if (wx >= f.x && wx <= f.x + f.w && wy >= f.y && wy <= f.y + f.h) return f
+      if (wx >= bounds.x && wx <= bounds.x + bounds.w && wy >= bounds.y && wy <= bounds.y + bounds.h) return f
     }
   }
   return null
@@ -3854,7 +3822,7 @@ function onCanvasMouseLeave() {
 }
 function onCanvasWheel(e) {
   const factor = e.deltaY < 0 ? 1.1 : 0.9
-  viewState.scale = Math.max(0.5, Math.min(3, viewState.scale * factor))
+  viewState.scale = Math.max(getBoundarySafeScale(), Math.min(3, viewState.scale * factor))
   render()
 }
 
@@ -3943,11 +3911,6 @@ function toggleHeatmap() {
   render()
   showToast(showHeatmap.value ? '热力图已开启' : '热力图已关闭', 'success')
 }
-function toggleFlow() {
-  showFlow.value = !showFlow.value
-  render()
-  showToast(showFlow.value ? '管道流向已显示' : '管道流向已隐藏', 'success')
-}
 function toggleEntrances() {
   showEntrances.value = !showEntrances.value
   if (!showEntrances.value) hoveredEntrance.value = null
@@ -3974,13 +3937,79 @@ function zoomIn() {
   render()
 }
 function zoomOut() {
-  viewState.scale = Math.max(0.5, viewState.scale / 1.2)
+  viewState.scale = Math.max(getBoundarySafeScale(), viewState.scale / 1.2)
   render()
 }
 function zoomReset() {
-  viewState.scale = 1; viewState.offsetX = 0; viewState.offsetY = 0
+  fitInitialMapView()
   render()
   showToast('视图已重置', 'success')
+}
+
+function fitInitialMapView() {
+  if (!canvasEl) return
+  const scaleX = (canvasEl.width * 0.98) / REAL_MAP.width
+  const scaleY = (canvasEl.height * 0.98) / REAL_MAP.height
+  viewState.scale = Math.max(scaleX, scaleY)
+
+  const renderedWidth = REAL_MAP.width * viewState.scale
+  const renderedHeight = REAL_MAP.height * viewState.scale
+  const leftPadding = Math.max(8, (canvasEl.width - renderedWidth) / 2)
+  const topPadding = Math.max(8, (canvasEl.height - renderedHeight) / 2)
+  const builtInMarginX = canvasEl.width * 0.05
+  const builtInMarginY = canvasEl.height * 0.05
+  viewState.offsetX = (leftPadding - builtInMarginX) / viewState.scale
+  viewState.offsetY = (topPadding - builtInMarginY) / viewState.scale
+  clampMapViewToCanvas()
+}
+
+function getBoundarySafeScale() {
+  if (!canvasEl) return 0.15
+  const scaleX = (canvasEl.width - 12) / REAL_MAP.width
+  const scaleY = (canvasEl.height - 12) / REAL_MAP.height
+  return Math.max(0.15, scaleX, scaleY)
+}
+
+function clampMapViewToCanvas() {
+  if (!canvasEl) return
+  const s = Math.max(viewState.scale, getBoundarySafeScale())
+  if (viewState.scale !== s) viewState.scale = s
+
+  const pad = 6
+  const builtInMarginX = canvasEl.width * 0.05
+  const builtInMarginY = canvasEl.height * 0.05
+  const mapW = REAL_MAP.width * s
+  const mapH = REAL_MAP.height * s
+
+  if (mapW <= canvasEl.width - pad * 2) {
+    viewState.offsetX = ((canvasEl.width - mapW) / 2 - builtInMarginX) / s
+  } else {
+    let left = viewState.offsetX * s + builtInMarginX
+    let right = left + mapW
+    if (left > pad) {
+      viewState.offsetX += (pad - left) / s
+      left = viewState.offsetX * s + builtInMarginX
+      right = left + mapW
+    }
+    if (right < canvasEl.width - pad) {
+      viewState.offsetX += (canvasEl.width - pad - right) / s
+    }
+  }
+
+  if (mapH <= canvasEl.height - pad * 2) {
+    viewState.offsetY = ((canvasEl.height - mapH) / 2 - builtInMarginY) / s
+  } else {
+    let top = viewState.offsetY * s + builtInMarginY
+    let bottom = top + mapH
+    if (top > pad) {
+      viewState.offsetY += (pad - top) / s
+      top = viewState.offsetY * s + builtInMarginY
+      bottom = top + mapH
+    }
+    if (bottom < canvasEl.height - pad) {
+      viewState.offsetY += (canvasEl.height - pad - bottom) / s
+    }
+  }
 }
 function onSearch() {
   const q = searchQuery.value.trim().toLowerCase()
@@ -3990,12 +4019,9 @@ function onSearch() {
     selectedFacility.value = match
     showFacilityInfo(match)
     selectedZone.value = match.zone
-    let fx, fy
-    if (match.type === 'tank') { fx = match.x; fy = match.y }
-    else if (match.type === 'tower') { fx = match.x; fy = match.y }
-    else { fx = match.x + match.w / 2; fy = match.y + match.h / 2 }
-    viewState.offsetX = canvasEl.width / 2 / viewState.scale - fx
-    viewState.offsetY = canvasEl.height / 2 / viewState.scale - fy
+    const anchor = getFacilityAnchorPoint(match)
+    viewState.offsetX = canvasEl.width / 2 / viewState.scale - anchor.x
+    viewState.offsetY = canvasEl.height / 2 / viewState.scale - anchor.y
     render()
   }
 }
@@ -4083,6 +4109,11 @@ function autoConfigFromCarParams() {
 }
 
 async function runDiffusionSimulation(options = {}) {
+  if (diffusionState.running) return
+  if (!currentLeakSourcePoint.value) {
+    showToast('请先选择有效泄漏源点或应用经纬度源点', 'warn')
+    return
+  }
   const payload = {
     gasId: diffusionForm.gasId,
     sourceFacilityId: diffusionForm.sourceFacilityId,
@@ -4102,43 +4133,55 @@ async function runDiffusionSimulation(options = {}) {
     frameCount: diffusionForm.frameCount,
     frameStepSec: diffusionForm.frameStepSec,
   }
-  const resp = await apiRunDiffusionSimulation(payload)
-  if (!resp.success || !resp.data?.frames) {
-    showToast('扩散模拟失败: ' + (resp.error || '未知错误'), 'error')
-    return
-  }
-  const result = resp.data
-  diffusionFrames.value = result.frames
-  diffusionMeta.value = {
-    gas: result.gas,
-    sourceFacility: result.sourceFacility,
-    sourcePoint: result.sourcePoint,
-    stats: result.stats,
-    blockedMask: result.blockedMask || null,
-    map: result.map || null,
-    executor: result.executor || null,
-    sensorSeries: result.sensorSeries || [],
-    scenarioMeta: result.scenarioMeta || null,
-    outputMeta: result.outputMeta || null,
-  }
-  diffusionState.currentFrame = 0
-  diffusionState.accumulatorMs = 0
-  diffusionState.playing = diffusionFrames.value.length > 1
-  resampleSensorsFromDiffusion()
-  if (evacuationBatchResult.value?.routesByBuilding?.length) {
-    runBatchEvacuationPlanning({ silent: true })
-  } else if (evacuationPlan.value?.success) {
-    runEvacuationPlanning({ silent: true })
-  }
-  render()
+  diffusionState.running = true
   if (!options.silent) {
-    showToast(`已生成 ${diffusionFrames.value.length} 帧扩散动画`, 'success')
+    showToast('正在调用算法服务生成扩散动画...', 'success')
+  }
+  try {
+    const resp = await apiRunDiffusionSimulation(payload)
+    if (!resp?.success || !resp.data?.frames?.length) {
+      showToast('扩散模拟失败: ' + (resp?.error || resp?.message || '算法服务未返回有效帧数据'), 'error')
+      return
+    }
+    const result = resp.data
+    diffusionFrames.value = result.frames
+    diffusionMeta.value = {
+      gas: result.gas,
+      sourceFacility: result.sourceFacility,
+      sourcePoint: result.sourcePoint,
+      stats: result.stats,
+      blockedMask: result.blockedMask || null,
+      map: result.map || null,
+      executor: result.executor || null,
+      sensorSeries: result.sensorSeries || [],
+      scenarioMeta: result.scenarioMeta || null,
+      outputMeta: result.outputMeta || null,
+    }
+    diffusionState.currentFrame = 0
+    diffusionState.accumulatorMs = 0
+    diffusionState.playing = diffusionFrames.value.length > 1
+    resampleSensorsFromDiffusion()
+    if (evacuationBatchResult.value?.routesByBuilding?.length) {
+      runBatchEvacuationPlanning({ silent: true })
+    } else if (evacuationPlan.value?.success) {
+      runEvacuationPlanning({ silent: true })
+    }
+    render()
+    if (!options.silent) {
+      showToast(`已生成 ${diffusionFrames.value.length} 帧扩散动画`, 'success')
+    }
+  } catch (error) {
+    const message = error?.message || '请检查算法服务是否已启动'
+    showToast(`扩散模拟失败: ${message}`, 'error')
+  } finally {
+    diffusionState.running = false
   }
 }
 function resetDiffusionSimulation() {
   diffusionFrames.value = []
   diffusionState.currentFrame = 0
   diffusionState.playing = false
+  diffusionState.running = false
   diffusionState.accumulatorMs = 0
   diffusionMeta.value = {
     gas: getGasById(diffusionForm.gasId),
@@ -5008,11 +5051,9 @@ function animate(timestamp = 0) {
   }
   const deltaMs = lastAnimTime ? timestamp - lastAnimTime : 16
   lastAnimTime = timestamp
-  flowAnimOffset += 0.8
   updateDiffusionPlayback(deltaMs)
   updateRefinementPlayback(deltaMs)
   updateCarPatrol(deltaMs)
-  if (flowAnimOffset > 100) flowAnimOffset = 0
   render()
   animFrameId = requestAnimationFrame(animate)
 }
@@ -5522,9 +5563,7 @@ onMounted(() => {
   })
   updateCoordDisplay(0, 0)
   resizeCanvas()
-  const scaleX = (canvasEl.width * 0.9) / 1020
-  const scaleY = (canvasEl.height * 0.9) / 660
-  viewState.scale = Math.min(scaleX, scaleY, 1.5)
+  fitInitialMapView()
   updateClock()
   clockTimer = setInterval(updateClock, 1000)
   window.addEventListener('resize', resizeCanvas)
@@ -5603,7 +5642,7 @@ const leakSourceLocationText = computed(() => {
   const point = currentLeakSourcePoint.value
   if (!point) return '--'
   const geo = worldToGeo(point.x, point.y)
-  return `${geo.longitude.toFixed(3)}°E / ${geo.latitude.toFixed(3)}°N`
+  return `${geo.longitude.toFixed(6)}°E / ${geo.latitude.toFixed(6)}°N`
 })
 watch(() => diffusionForm.sourceFacilityId, () => {
   if (leakSourceState.mode !== 'facility') return
@@ -5756,8 +5795,15 @@ watch(
   background: #2d3748; color: var(--fg-muted);
 }
 .zone-item.selected .zone-tag { background: #132a22; color: var(--accent); }
-.map-container { flex: 1; position: relative; overflow: hidden; background: #1a2e1e; }
-#mapCanvas { display: block; cursor: grab; }
+.map-container {
+  flex: 1;
+  align-self: stretch;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  background: #070921;
+}
+#mapCanvas { display: block; width: 100%; height: 100%; cursor: grab; }
 #mapCanvas.grabbing { cursor: grabbing; }
 .control-grid {
   display: grid;
@@ -5847,11 +5893,25 @@ watch(
 .coord-display {
   position: absolute; top: 12px; left: 12px;
   background: #1e293b; border: 1px solid var(--border);
-  border-radius: 8px; padding: 8px 14px;
+  border-radius: 8px; padding: 7px 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  max-width: min(560px, calc(100% - 24px));
   font-family: 'Orbitron', sans-serif; font-size: 11px;
   color: var(--fg-muted); z-index: 30; backdrop-filter: blur(10px);
 }
-.coord-display span { color: var(--accent); }
+.coord-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+.coord-label {
+  color: var(--fg-muted);
+}
+.coord-display strong {
+  color: var(--accent);
+  font-weight: 700;
+}
 .sensor-hover-card {
   position: absolute;
   top: 60px;
@@ -6637,6 +6697,9 @@ watch(
 .sensor-btn {
   height:32px;border-radius:6px;border:none;
   font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;
+}
+.sensor-btn:disabled {
+  cursor:not-allowed;opacity:0.58;filter:saturate(0.7);
 }
 .sensor-btn.primary { background:var(--accent-dim);color:var(--accent); }
 .sensor-btn.primary.active { background:#132a22;color:var(--accent);outline:1px solid rgba(0,229,160,0.28); }

@@ -56,7 +56,7 @@ public class ImageAnalysisController {
             return ResponseEntity.badRequest().body(Result.error(400, "未上传文件"));
         }
         if (file.getSize() > MAX_FILE_SIZE) {
-            return ResponseEntity.status(413).body(Result.error(413, "文件过大，最大 10MB"));
+            return ResponseEntity.status(413).body(Result.error(413, "文件过大，最大支持 10MB"));
         }
 
         String contentType = file.getContentType();
@@ -73,13 +73,13 @@ public class ImageAnalysisController {
             String algorithmResult = requestAlgorithmService(file, filename);
             JSONObject analysisData = JSONObject.parseObject(algorithmResult);
             saveInspectRecordIfNeeded(analysisData);
-            log.info("人员分析请求完成, 文件名: {}", filename);
+            log.info("人员分析请求完成，文件名：{}", filename);
             return ResponseEntity.ok(Result.success(analysisData));
         } catch (IllegalStateException exception) {
-            log.warn("人员识别服务未配置: {}", exception.getMessage());
+            log.warn("人员识别服务未配置：{}", exception.getMessage());
             return ResponseEntity.status(503).body(Result.error(503, "人员识别服务未配置"));
         } catch (IOException exception) {
-            log.error("文件读取失败: {}", filename, exception);
+            log.error("文件读取失败：{}", filename, exception);
             return ResponseEntity.status(500).body(Result.error(500, "文件读取失败"));
         } catch (Exception exception) {
             log.error("算法服务异常", exception);
@@ -96,7 +96,7 @@ public class ImageAnalysisController {
     @DeleteMapping("/delete/{id}")
     public ResponseEntity<Result<?>> delete(@PathVariable Long id) {
         inspectRecordMapper.deleteById(id);
-        log.info("删除巡检记录, id: {}", id);
+        log.info("删除巡检记录，id：{}", id);
         return ResponseEntity.ok(Result.success("删除成功"));
     }
 
@@ -148,7 +148,7 @@ public class ImageAnalysisController {
             record.setImageBase64(analysisData.getString("image_base64"));
             record.setAnalysisTime(0);
             inspectRecordMapper.insert(record);
-            log.info("巡检记录已保存, 人数: {}", personCount);
+            log.info("巡检记录已保存，人数：{}", personCount);
         } catch (Exception exception) {
             log.error("保存巡检记录失败", exception);
         }

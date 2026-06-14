@@ -13,7 +13,7 @@
       <div class="header-right">
         <div class="status-indicator">
           <span class="dot" :class="{ 'is-active': isAutoPolling }"></span>
-          任务状态: {{ isAutoPolling ? 'AI实时分析中' : '系统就绪' }}
+          任务状态：{{ isAutoPolling ? 'AI 实时分析中' : '系统就绪' }}
         </div>
       </div>
     </header>
@@ -41,7 +41,7 @@
         </div>
 
         <div class="data-box panel-left-bottom">
-          <div class="box-title"><el-icon><TrendCharts /></el-icon> 近1小时巡检量趋势</div>
+          <div class="box-title"><el-icon><TrendCharts /></el-icon> 近 1 小时巡检量趋势</div>
           <div ref="lineRef" class="chart-container-small"></div>
         </div>
       </el-col>
@@ -50,10 +50,10 @@
         <div class="data-box main-video-panel">
           <div class="video-header">
             <div class="cam-name">
-              <span class="live-tag">LIVE</span> 核心作业区-A7摄像头
+              <span class="live-tag">LIVE</span> 核心作业区 A7 摄像头
             </div>
-            <div class="task-progress" v-if="imageQueue.length > 0">
-              进度: {{ currentIndex + 1 }} / {{ imageQueue.length }}
+            <div v-if="imageQueue.length > 0" class="task-progress">
+              进度：{{ currentIndex + 1 }} / {{ imageQueue.length }}
             </div>
           </div>
 
@@ -65,7 +65,7 @@
 
             <div v-if="resultImage" class="img-container">
               <el-image :src="resultImage" fit="contain" class="main-img" />
-              <div class="scanner-line" v-if="isAutoPolling"></div>
+              <div v-if="isAutoPolling" class="scanner-line"></div>
             </div>
 
             <div v-else class="upload-guide" @click="triggerUpload">
@@ -77,13 +77,13 @@
           </div>
 
           <div class="control-footer">
-            <input type="file" ref="fileInput" style="display:none" multiple accept="image/*" @change="handleFileSelect" />
+            <input ref="fileInput" type="file" style="display: none" multiple accept="image/*" @change="handleFileSelect" />
             <el-button-group>
-              <el-button type="primary" :icon="UploadFilled" @click="triggerUpload" :disabled="isAutoPolling">导入素材</el-button>
-              <el-button type="success" :icon="CaretRight" @click="toggleAutoPolling" :disabled="imageQueue.length === 0 || isAutoPolling">启动巡检</el-button>
+              <el-button type="primary" :icon="UploadFilled" :disabled="isAutoPolling" @click="triggerUpload">导入素材</el-button>
+              <el-button type="success" :icon="CaretRight" :disabled="imageQueue.length === 0 || isAutoPolling" @click="toggleAutoPolling">启动巡检</el-button>
               <el-button type="danger" :icon="RefreshRight" @click="resetTask">重置任务</el-button>
             </el-button-group>
-            <div class="queue-info">待处理队列: {{ Math.max(0, imageQueue.length - currentIndex) }} 张</div>
+            <div class="queue-info">待处理队列：{{ Math.max(0, imageQueue.length - currentIndex) }} 张</div>
           </div>
         </div>
       </el-col>
@@ -99,7 +99,7 @@
                   <el-tag size="small" :type="log.count > 5 ? 'danger' : 'success'">
                     {{ log.count > 5 ? '异常' : '正常' }}
                   </el-tag>
-                  <el-button text size="small" @click="delLog(log.id)" style="color:#f56c6c;margin-left:6px">删除</el-button>
+                  <el-button text size="small" class="delete-btn" @click="delLog(log.id)">删除</el-button>
                 </div>
                 <div class="log-content">
                   检测到人员：<strong>{{ log.count }}</strong>，位置：{{ log.location }}
@@ -120,7 +120,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import {
   UploadFilled,
@@ -130,11 +129,11 @@ import {
   TrendCharts,
   List,
   CaretRight,
-  RefreshRight
+  RefreshRight,
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+import request from '@/utils/request'
 
-// --- 类型定义 ---
 interface DetectionLog {
   id: number
   time: string
@@ -142,7 +141,20 @@ interface DetectionLog {
   count: number
 }
 
-// --- 状态变量 ---
+interface InspectRecord {
+  id: number
+  createTime: string
+  location: string
+  personCount: number
+}
+
+interface AnalysisData {
+  status: string
+  count: number
+  image_base64?: string
+  message?: string
+}
+
 const resultImage = ref('')
 const loading = ref(false)
 const currentTime = ref('')
@@ -154,10 +166,8 @@ const currentIndex = ref(0)
 const detectionLogs = ref<DetectionLog[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 
-// 定时器引用
 let pollingTimer: ReturnType<typeof setTimeout> | null = null
 
-// Echarts 引用与实例
 const gaugeRef = ref<HTMLElement | null>(null)
 const pieRef = ref<HTMLElement | null>(null)
 const lineRef = ref<HTMLElement | null>(null)
@@ -165,40 +175,47 @@ let gaugeChart: echarts.ECharts | null = null
 let pieChart: echarts.ECharts | null = null
 let lineChart: echarts.ECharts | null = null
 
-// 加载数据库全部日志
 const loadLogList = async () => {
-  const res = await axios.get((import.meta.env.VITE_APP_BASE_API || '/api') + "/analysis/list")
-  const logItems = Array.isArray(res.data?.data) ? res.data.data : res.data
-  detectionLogs.value = logItems.map((item: { id: number; createTime: string; location: string; personCount: number }) => {
-    return {
+  try {
+    const res = await request.get('/analysis/list')
+    const logItems = Array.isArray(res.data) ? (res.data as InspectRecord[]) : []
+    detectionLogs.value = logItems.map((item) => ({
       id: item.id,
       time: new Date(item.createTime).toLocaleTimeString(),
       location: item.location,
-      count: item.personCount
-    }
-  })
+      count: item.personCount,
+    }))
+  } catch {
+    detectionLogs.value = []
+    ElMessage.warning('巡检历史加载失败，请检查后端服务')
+  }
 }
 
-// 删除单条日志
 const delLog = async (id: number) => {
-  await axios.delete(`${import.meta.env.VITE_APP_BASE_API || '/api'}/analysis/delete/${id}`)
-  await loadLogList()
-  ElMessage.success("删除成功")
+  try {
+    await request.delete(`/analysis/delete/${id}`)
+    await loadLogList()
+    ElMessage.success('删除成功')
+  } catch {
+    ElMessage.error('删除失败，请确认当前账号具有管理员权限')
+  }
 }
 
-// --- 初始化图表 ---
 const initCharts = () => {
   if (gaugeRef.value) {
     gaugeChart = echarts.init(gaugeRef.value, 'dark')
     gaugeChart.setOption({
       backgroundColor: 'transparent',
       series: [{
-        type: 'gauge', min: 0, max: 20, splitNumber: 4,
+        type: 'gauge',
+        min: 0,
+        max: 20,
+        splitNumber: 4,
         axisLine: { lineStyle: { width: 6, color: [[0.3, '#67C23A'], [0.7, '#E6A23C'], [1, '#F56C6C']] } },
         pointer: { width: 3 },
         detail: { fontSize: 20, color: '#fff', offsetCenter: [0, '70%'], formatter: '{value}' },
-        data: [{ value: 0 }]
-      }]
+        data: [{ value: 0 }],
+      }],
     })
   }
 
@@ -208,13 +225,17 @@ const initCharts = () => {
       backgroundColor: 'transparent',
       tooltip: { trigger: 'item' },
       series: [{
-        type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: false,
+        type: 'pie',
+        radius: ['40%', '70%'],
+        avoidLabelOverlap: false,
         itemStyle: { borderRadius: 10, borderColor: '#102038', borderWidth: 2 },
         label: { show: false },
         data: [
-          { value: 10, name: '生产A区' }, { value: 5, name: '仓储区' }, { value: 15, name: '装卸站' }
-        ]
-      }]
+          { value: 10, name: '生产 A 区' },
+          { value: 5, name: '仓储区' },
+          { value: 15, name: '装卸站' },
+        ],
+      }],
     })
   }
 
@@ -225,13 +246,14 @@ const initCharts = () => {
       grid: { top: 10, bottom: 20, left: 30, right: 10 },
       xAxis: { type: 'category', data: ['10:00', '10:15', '10:30', '10:45', '11:00'], axisLine: { show: false } },
       yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1a3a61' } } },
-      series: [{ data: [12, 18, 15, 25, 21], type: 'line', smooth: true, areaStyle: { color: 'rgba(0, 242, 254, 0.2)' } }]
+      series: [{ data: [12, 18, 15, 25, 21], type: 'line', smooth: true, areaStyle: { color: 'rgba(0, 242, 254, 0.2)' } }],
     })
   }
 }
 
-// --- 核心逻辑函数 ---
-const updateTime = () => { currentTime.value = new Date().toLocaleString() }
+const updateTime = () => {
+  currentTime.value = new Date().toLocaleString()
+}
 
 const stopPolling = () => {
   isAutoPolling.value = false
@@ -258,22 +280,38 @@ const analyzeImage = async (file: File) => {
   const formData = new FormData()
   formData.append('file', file)
   const start = Date.now()
+  loading.value = true
+
   try {
-    const res = await axios.post(`${import.meta.env.VITE_APP_BASE_API || '/api'}/analysis/person`, formData)
-    const analysisData = res.data?.data || res.data
+    const res = await request.post('/analysis/person', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 90000,
+    })
+    const analysisData = res.data as AnalysisData
     if (analysisData.status === 'success') {
-      resultImage.value = analysisData.image_base64
+      resultImage.value = normalizeResultImage(analysisData.image_base64 || '')
       analysisTime.value = Date.now() - start
       currentCount.value = analysisData.count
-
       gaugeChart?.setOption({ series: [{ data: [{ value: analysisData.count }] }] })
-      // 分析完成 重新拉取数据库列表
       await loadLogList()
+      ElMessage.success(`识别完成，检测到 ${analysisData.count} 人`)
+    } else {
+      stopPolling()
+      ElMessage.warning(analysisData?.message || '算法服务未返回有效识别结果')
     }
-  } catch (err) {
+  } catch (err: any) {
     stopPolling()
-    ElMessage.error("算法节点响应超时，请检查后端服务")
+    const message = err?.response?.data?.message || err?.message || '算法节点响应异常'
+    ElMessage.error(`识别失败：${message}`)
+  } finally {
+    loading.value = false
   }
+}
+
+const normalizeResultImage = (imageBase64: string) => {
+  if (!imageBase64) return ''
+  if (imageBase64.startsWith('data:image/')) return imageBase64
+  return `data:image/jpeg;base64,${imageBase64}`
 }
 
 const toggleAutoPolling = () => {
@@ -287,13 +325,12 @@ const runPollingTask = async () => {
 
   if (currentIndex.value >= imageQueue.value.length) {
     stopPolling()
-    ElMessage.success("巡检任务完成")
+    ElMessage.success('巡检任务完成')
     return
   }
 
   await analyzeImage(imageQueue.value[currentIndex.value])
   currentIndex.value++
-
   pollingTimer = setTimeout(runPollingTask, 2500)
 }
 
@@ -305,15 +342,13 @@ const resetTask = () => {
   currentCount.value = 0
   analysisTime.value = 0
   gaugeChart?.setOption({ series: [{ data: [{ value: 0 }] }] })
-  ElMessage.info("任务已重置")
+  ElMessage.info('任务已重置')
 }
 
-// --- 生命周期 ---
 onMounted(() => {
   updateTime()
   const timer = setInterval(updateTime, 1000)
   initCharts()
-  // 页面初始化加载数据库日志
   loadLogList()
 
   const handleResize = () => {
@@ -332,18 +367,16 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 核心容器 - 建议找一张科技感深色背景图 */
 .big-screen-container {
   min-height: 100vh;
   background: #020b1a url('https://img.zcool.cn/community/0173695d3298c5a801214847be73be.jpg@2o.jpg') no-repeat center;
   background-size: cover;
   color: #fff;
-  padding: 0 20px 20px 20px;
+  padding: 0 20px 20px;
   overflow: hidden;
   font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
 }
 
-/* 科技感头部 */
 .screen-header {
   height: 80px;
   position: relative;
@@ -354,7 +387,10 @@ onMounted(() => {
 }
 .header-bg-line {
   position: absolute;
-  bottom: 0; left: 0; width: 100%; height: 2px;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
   background: linear-gradient(90deg, transparent, #00f2fe, transparent);
 }
 .main-title {
@@ -367,9 +403,13 @@ onMounted(() => {
   color: transparent;
   text-shadow: 0 0 15px rgba(0, 242, 254, 0.5);
 }
-.sub-title-line { font-size: 10px; color: #3a5a85; text-align: center; letter-spacing: 1px; }
+.sub-title-line {
+  font-size: 10px;
+  color: #3a5a85;
+  text-align: center;
+  letter-spacing: 1px;
+}
 
-/* 边框盒子美化 */
 .data-box {
   background: rgba(6, 30, 61, 0.8);
   border: 1px solid #1a3a61;
@@ -388,20 +428,29 @@ onMounted(() => {
   border-bottom: 1px solid rgba(0, 242, 254, 0.2);
   padding-bottom: 8px;
 }
-
-/* 图表容器 */
 .chart-container { height: 180px; }
 .chart-container-small { height: 140px; }
 
-/* 核心展示面板 */
-.main-video-panel { border: 1px solid rgba(0, 242, 254, 0.5); padding: 5px; }
+.main-video-panel {
+  border: 1px solid rgba(0, 242, 254, 0.5);
+  padding: 5px;
+}
 .video-header {
-  display: flex; justify-content: space-between; padding: 5px 10px;
-  background: rgba(0, 242, 254, 0.1); font-size: 12px; color: #00f2fe;
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 10px;
+  background: rgba(0, 242, 254, 0.1);
+  font-size: 12px;
+  color: #00f2fe;
 }
 .live-tag {
-  background: #f56c6c; color: #fff; padding: 0 4px; border-radius: 2px;
-  margin-right: 5px; font-weight: bold; animation: blink 1s infinite;
+  background: #f56c6c;
+  color: #fff;
+  padding: 0 4px;
+  border-radius: 2px;
+  margin-right: 5px;
+  font-weight: bold;
+  animation: blink 1s infinite;
 }
 
 .display-area {
@@ -414,74 +463,189 @@ onMounted(() => {
   align-items: center;
   overflow: hidden;
 }
-.img-container { width: 100%; height: 100%; position: relative; }
-.main-img { width: 100%; height: 100%; }
+.img-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+.main-img {
+  width: 100%;
+  height: 100%;
+}
 
-/* 四角装饰线 */
-.corner-line { position: absolute; width: 15px; height: 15px; border: 2px solid #00f2fe; }
+.corner-line {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border: 2px solid #00f2fe;
+}
 .top-left { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
 .top-right { top: -2px; right: -2px; border-left: 0; border-bottom: 0; }
 .bottom-left { bottom: -2px; left: -2px; border-right: 0; border-top: 0; }
 .bottom-right { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
 
-/* 扫描线动画 */
 .scanner-line {
-  position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
   background: linear-gradient(to right, transparent, #00f2fe, transparent);
   box-shadow: 0 0 8px #00f2fe;
   animation: scan 3s linear infinite;
   z-index: 10;
 }
-@keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+@keyframes scan {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
 
-/* 引导雷达动画 */
-.upload-guide { text-align: center; color: #3a5a85; cursor: pointer; }
+.upload-guide {
+  text-align: center;
+  color: #3a5a85;
+  cursor: pointer;
+}
 .radar-circle {
-  position: absolute; width: 150px; height: 150px; top: 50%; left: 50%;
-  margin: -75px 0 0 -75px; border: 1px solid #00f2fe; border-radius: 50%;
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  top: 50%;
+  left: 50%;
+  margin: -75px 0 0 -75px;
+  border: 1px solid #00f2fe;
+  border-radius: 50%;
   animation: radar 2s infinite;
 }
-@keyframes radar { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
-.guide-icon { font-size: 60px; margin-bottom: 10px; color: #1a3a61; }
+@keyframes radar {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}
+.guide-icon {
+  font-size: 60px;
+  margin-bottom: 10px;
+  color: #1a3a61;
+}
 
-/* 指标数值 */
-.metric-grid { display: flex; gap: 10px; margin-top: 10px; }
-.metric-card { flex: 1; background: rgba(0, 242, 254, 0.05); padding: 10px; border-radius: 4px; text-align: center; }
-.m-label { font-size: 11px; color: #8492a6; margin-bottom: 5px; }
-.m-value { font-size: 22px; font-weight: bold; }
-.m-value span { font-size: 12px; margin-left: 4px; color: #fff; }
+.metric-grid {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.metric-card {
+  flex: 1;
+  background: rgba(0, 242, 254, 0.05);
+  padding: 10px;
+  border-radius: 4px;
+  text-align: center;
+}
+.m-label {
+  font-size: 11px;
+  color: #8492a6;
+  margin-bottom: 5px;
+}
+.m-value {
+  font-size: 22px;
+  font-weight: bold;
+}
+.m-value span {
+  font-size: 12px;
+  margin-left: 4px;
+  color: #fff;
+}
 .color-blue { color: #00f2fe; }
-.color-green { color: #67C23A; }
+.color-green { color: #67c23a; }
 
-/* 日志流水 */
-.log-list-wrapper { height: 320px; overflow-y: auto; padding-right: 5px; }
+.log-list-wrapper {
+  height: 320px;
+  overflow-y: auto;
+  padding-right: 5px;
+}
 .log-item {
   background: rgba(255, 255, 255, 0.03);
-  margin-bottom: 8px; padding: 10px; border-left: 3px solid #00f2fe;
+  margin-bottom: 8px;
+  padding: 10px;
+  border-left: 3px solid #00f2fe;
   transition: all 0.3s;
 }
-.warning-log { border-left-color: #F56C6C; background: rgba(245, 108, 108, 0.05); }
-.log-header { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 11px; }
+.warning-log {
+  border-left-color: #f56c6c;
+  background: rgba(245, 108, 108, 0.05);
+}
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  font-size: 11px;
+}
 .log-time { color: #8492a6; }
-.log-content { font-size: 12px; color: #eee; }
+.log-content {
+  font-size: 12px;
+  color: #eee;
+}
+.delete-btn {
+  color: #f56c6c;
+  margin-left: 6px;
+}
 
-/* 状态灯动画 */
-.status-indicator { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #00f2fe; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #909399; }
-.is-active { background: #67C23A; box-shadow: 0 0 10px #67C23A; animation: blink 1s infinite; }
-@keyframes blink { 50% { opacity: 0.3; } }
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #00f2fe;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #909399;
+}
+.is-active {
+  background: #67c23a;
+  box-shadow: 0 0 10px #67c23a;
+  animation: blink 1s infinite;
+}
+@keyframes blink {
+  50% { opacity: 0.3; }
+}
 
-.safety-days { font-size: 42px; color: #E6A23C; text-align: center; font-weight: bold; font-family: 'Impact'; }
-.safety-days span { font-size: 14px; margin-left: 8px; color: #8492a6; font-weight: normal; }
+.safety-days {
+  font-size: 42px;
+  color: #e6a23c;
+  text-align: center;
+  font-weight: bold;
+  font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+}
+.safety-days span {
+  font-size: 14px;
+  margin-left: 8px;
+  color: #8492a6;
+  font-weight: normal;
+}
 
-.control-footer { margin-top: 15px; display: flex; justify-content: space-between; align-items: center; }
-.queue-info { font-size: 12px; color: #8492a6; }
+.control-footer {
+  margin-top: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.queue-info {
+  font-size: 12px;
+  color: #8492a6;
+}
 
-/* 列表动画 */
-.list-enter-active, .list-leave-active { transition: all 0.5s ease; }
-.list-enter-from { opacity: 0; transform: translateX(-30px); }
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.5s ease;
+}
+.list-enter-from {
+  opacity: 0;
+  transform: translateX(-30px);
+}
 
-/* 滚动条美化 */
 ::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-thumb { background: #1a3a61; border-radius: 2px; }
+::-webkit-scrollbar-thumb {
+  background: #1a3a61;
+  border-radius: 2px;
+}
 </style>

@@ -10,17 +10,17 @@ const router = createRouter({
   },
 })
 
-// 路由守卫：未登录时强制跳转登录页
+// 路由守卫：未登录时强制跳转到登录页。
 const whiteList = ['/login', '/register', '/404']
 router.beforeEach((to, _from, next) => {
-  // 统一从 token 工具读取（key 'TOKEN'），与 store / 请求拦截器保持同一数据源
+  // 统一从 token 工具读取，和 store / 请求拦截器保持同一数据源。
   const token = GET_TOKEN()
   if (token) {
     next()
   } else if (whiteList.includes(to.path)) {
     next()
   } else {
-    // 记录目标地址，登录后可回跳
+    // 记录目标地址，登录后回到原访问页面。
     next({ path: '/login', query: { redirect: to.fullPath } })
   }
 })

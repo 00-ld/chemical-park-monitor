@@ -143,7 +143,7 @@
               <template #default="scope">
                 <span class="concentration-text">
                   {{ scope.row.gasValue }}
-                  {{ scope.row.gasType === 'o2' ? '%VOL' : 'ppm' }}
+                  {{ normalizeGasType(scope.row.gasType) === 'O2' ? '%VOL' : 'ppm' }}
                 </span>
               </template>
             </el-table-column>
@@ -348,20 +348,10 @@ import {
   VideoPlay, WarnTriangleFilled, Clock, Delete, Plus, Close, Search, Histogram
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
-import axios from 'axios'
 import { useRouter } from 'vue-router'
+import request from '@/utils/request'
 
 const router = useRouter()
-
-// ========== 核心配置：后端接口基础地址 ==========
-const baseURL = import.meta.env.VITE_APP_BASE_API || '/api'
-const request = axios.create({
-  baseURL: baseURL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json'
-  }
-})
 
 // 搜索关键词
 const searchKey = ref('')
@@ -766,14 +756,26 @@ interface HistoryItem {
 const historyList = ref<HistoryItem[]>([])
 
 // 格式化气体类型显示
+const normalizeGasType = (gasType: string | null | undefined) => {
+  const raw = String(gasType || '').trim().toUpperCase()
+  if (!raw) return ''
+  if (raw.includes('CO') || raw.includes('一氧化碳')) return 'CO'
+  if (raw.includes('O2') || raw.includes('O₂') || raw.includes('氧气')) return 'O2'
+  if (raw.includes('NH3') || raw.includes('NH₃') || raw.includes('氨')) return 'NH3'
+  if (raw.includes('CH4') || raw.includes('CH₄') || raw.includes('甲烷') || raw.includes('可燃')) return 'CH4'
+  if (raw.includes('H2S') || raw.includes('H₂S') || raw.includes('硫化氢')) return 'NH3'
+  return raw
+}
+
 const formatGasType = (gasType: string) => {
   const gasMap: Record<string, string> = {
-    'ch4': '甲烷(CH₄)',
-    'nh3': '氨气(NH₃)',
-    'co': '一氧化碳(CO)',
-    'o2': '氧气(O₂)'
+    CH4: '甲烷(CH₄)',
+    NH3: '氨气(NH₃)',
+    CO: '一氧化碳(CO)',
+    O2: '氧气(O₂)'
   }
-  return gasMap[gasType] || gasType
+  const normalized = normalizeGasType(gasType)
+  return gasMap[normalized] || gasType
 }
 
 // 格式化时间
@@ -787,19 +789,19 @@ const formatTime = (timeStr: string) => {
 const getRiskLevel = (item: HistoryItem | null | undefined) => {
   if (!item || !item.gasType || !item.gasValue) return 4
 
-  const gasType = item.gasType
+  const gasType = normalizeGasType(item.gasType)
   const value = parseFloat(item.gasValue as unknown as string)
 
   if (isNaN(value)) return 4
 
   switch (gasType) {
-    case '可燃气体':
+    case 'CH4':
       return value >= 50 ? 1 : value >= 20 ? 2 : value >= 10 ? 3 : 4
-    case 'NH₃':
+    case 'NH3':
       return value >= 75 ? 1 : value >= 50 ? 2 : value >= 25 ? 3 : 4
     case 'CO':
       return value >= 262 ? 1 : value >= 87 ? 2 : value >= 19 ? 3 : 4
-    case '氧气':
+    case 'O2':
       return value >= 20.9 ? 1 : value >= 19.9 ? 2 : value >= 19.5 ? 3 : 4
     default:
       return 4
@@ -832,8 +834,8 @@ const getLevelTagType = (level: number) => {
 const fetchHistory = async () => {
   try {
     const res = await request.get('/history/list')
-    if (res.data.code === 200) {
-      historyList.value = res.data.data.sort((a: HistoryItem, b: HistoryItem) =>
+    if (res.code === 200) {
+      historyList.value = res.data.sort((a: HistoryItem, b: HistoryItem) =>
           new Date(b.warningTime).getTime() - new Date(a.warningTime).getTime()
       )
       renderCharts()
@@ -858,7 +860,7 @@ const handleDelete = async (id: number) => {
     )
 
     const res = await request.post('/history/delete', { id })
-    if (res.data.code === 200) {
+    if (res.code === 200) {
       ElMessage.success('删除成功')
       fetchHistory()
     } else {

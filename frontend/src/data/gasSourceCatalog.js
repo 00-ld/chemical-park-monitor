@@ -1,33 +1,33 @@
-const MAP_METERS_PER_UNIT = 0.5
+import { MAP_METERS_PER_UNIT } from './coordinate'
 
 export const GAS_SOURCE_CATALOG = [
   {
     gasId: 'co',
-    gasName: '一氧化碳',
+    gasName: 'CO',
     validRadiusMeters: 36,
-    allowedSourceFacilityIds: ['b23', 'b07'],
-    description: '允许位于一氧化碳钢瓶库及相关工艺区附近',
+    allowedSourceFacilityIds: ['pa-west-north', 'pa-center-north', 'pa-center-south', 'pb-mid-process', 'wh-logistics'],
+    description: 'Allowed near real-DOM production, process and warehouse areas',
   },
   {
     gasId: 'nh3',
-    gasName: '氨气',
+    gasName: 'NH3',
     validRadiusMeters: 38,
-    allowedSourceFacilityIds: ['t07', 't08'],
-    description: '允许位于液氨储罐和氨气相关工艺区域附近',
+    allowedSourceFacilityIds: ['pa-west-south', 'tw-center', 'pb-north-tank', 'pb-mid-process'],
+    description: 'Allowed near real-DOM tank, tower and process equipment areas',
   },
   {
     gasId: 'ch4',
-    gasName: '甲烷',
+    gasName: 'CH4',
     validRadiusMeters: 40,
-    allowedSourceFacilityIds: ['b20', 'b09'],
-    description: '允许位于甲烷储配库及配料区域附近',
+    allowedSourceFacilityIds: ['pa-west-north', 'pa-west-south', 'pb-north-tank', 'wh-logistics'],
+    description: 'Allowed near real-DOM combustible gas process, tank and warehouse areas',
   },
   {
     gasId: 'o2',
-    gasName: '氧气',
+    gasName: 'O2',
     validRadiusMeters: 30,
-    allowedSourceFacilityIds: ['b18'],
-    description: '允许位于氧气制备站附近',
+    allowedSourceFacilityIds: ['ut-center', 'pa-center-south', 'pb-mid-process'],
+    description: 'Allowed near real-DOM utility and process areas',
   },
 ]
 
@@ -133,7 +133,7 @@ export function validateGasLeakSource({
     allowedFacilities,
     nearestAllowedFacility: nearest?.facility || null,
     distanceToNearestAllowedMeters: nearest ? round2(nearest.distanceMeters) : null,
-    message: `当前泄漏点不在 ${config.gasName} 允许的生产/存储区域附近，最近允许设施为 ${nearestLabel}（${distanceLabel}）`,
+    message: `当前泄漏点不在 ${config.gasName} 允许的生产/储存区域附近，最近允许设施为 ${nearestLabel}，距离 ${distanceLabel}`,
   }
 }
 
@@ -153,9 +153,6 @@ function findNearestAllowedFacility(point, facilities) {
 }
 
 function getFacilityCenter(facility) {
-  if (facility.type === 'tank' || facility.type === 'tower') {
-    return { x: facility.x, y: facility.y }
-  }
   return {
     x: facility.x + (facility.w || 0) / 2,
     y: facility.y + (facility.h || 0) / 2,

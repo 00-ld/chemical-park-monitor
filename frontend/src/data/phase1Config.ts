@@ -1,8 +1,8 @@
 /* 园区地图常量 */
-export const MAP_WIDTH = 1000
-export const MAP_HEIGHT = 650
+export const MAP_WIDTH = 1587.2
+export const MAP_HEIGHT = 947.2
 export const GRID_SIZE = 20
-export const MAP_METERS_PER_UNIT = 0.5
+export const MAP_METERS_PER_UNIT = 1
 
 /* 气体类型配置数据 — 四气检测：CO / O2 / NH3 / CH4 */
 export const PHASE1_GASES = [

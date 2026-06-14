@@ -8,7 +8,10 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -20,15 +23,11 @@ public class LoginAndRegisterController {
     @Autowired
     private LoginService loginService;
 
-    // 简易限流：IP -> {次数, 窗口起始时间毫秒}
     private final ConcurrentHashMap<String, long[]> registerAttempts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, long[]> loginAttempts = new ConcurrentHashMap<>();
     private static final int MAX_REGISTER_PER_MINUTE = 5;
     private static final int MAX_LOGIN_PER_MINUTE = 10;
 
-    /**
-     * 固定窗口限流：同一 key 在 1 分钟窗口内累加次数，超过 limit 返回 true（已超限）。
-     */
     private boolean isRateLimited(ConcurrentHashMap<String, long[]> attempts, String key, int limit) {
         long now = System.currentTimeMillis();
         long[] record = attempts.compute(key, (k, v) -> {
@@ -43,7 +42,6 @@ public class LoginAndRegisterController {
 
     @PostMapping("/login")
     public ResponseEntity<Result<?>> login(@Valid @RequestBody User user, HttpServletRequest request) {
-        // 限流：同一 IP 每分钟最多登录尝试 10 次，防止暴力破解
         String ip = request.getRemoteAddr();
         if (isRateLimited(loginAttempts, ip, MAX_LOGIN_PER_MINUTE)) {
             log.warn("登录频率过高，IP: {}", ip);
@@ -61,19 +59,18 @@ public class LoginAndRegisterController {
 
     @PostMapping("/register")
     public ResponseEntity<Result<?>> register(@Valid @RequestBody User user, HttpServletRequest request) {
-        // 限流：每个 IP 每分钟最多注册 5 次
         String ip = request.getRemoteAddr();
         if (isRateLimited(registerAttempts, ip, MAX_REGISTER_PER_MINUTE)) {
             log.warn("注册频率过高，IP: {}", ip);
             return ResponseEntity.status(429).body(Result.error(429, "注册过于频繁，请稍后再试"));
         }
 
-        boolean b = loginService.register(user);
-        if (b) {
+        boolean registered = loginService.register(user);
+        if (registered) {
             log.info("用户注册成功: {}", user.getUsername());
             return ResponseEntity.ok(Result.success());
         }
-        log.warn("用户注册失败, 用户名已存在: {}", user.getUsername());
+        log.warn("用户注册失败，用户名已存在: {}", user.getUsername());
         return ResponseEntity.badRequest().body(Result.error(400, "用户名已存在"));
     }
 }

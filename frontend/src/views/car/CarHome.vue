@@ -41,7 +41,7 @@
             <h3>厂区二维地图</h3>
             <div class="map" ref="mapContainer">
               <img
-                src="/factory-map.png"
+                src="/maps/real-park-dom.jpg"
                 alt="厂区地图"
                 class="map-img"
                 @error="handleImgError"
@@ -188,7 +188,7 @@
             <div class="map-tab-body">
               <div class="map-preview">
                 <img
-                  src="/factory-map.png"
+                  src="/maps/real-park-dom.jpg"
                   alt="厂区地图预览"
                   class="map-preview-img"
                   @click="goToSmartMap"
@@ -200,7 +200,7 @@
                     :key="`pv-${car.id}`"
                     class="pv-marker"
                     :class="getCarStatus(car.id)"
-                    :style="{ left: `${(car.x / 600) * 100}%`, top: `${(car.y / 450) * 100}%` }"
+                    :style="{ left: `${(car.x / REAL_MAP_WIDTH) * 100}%`, top: `${(car.y / REAL_MAP_HEIGHT) * 100}%` }"
                   >
                     {{ car.id }}
                   </div>
@@ -323,7 +323,7 @@ import { useCarStore } from '@/store/carStore'
 import * as echarts from 'echarts'
 import { Clock, DataLine, MapLocation, View, Monitor, FullScreen, VideoCamera } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import request from '@/utils/request'
 
 interface CarItem {
   id: number
@@ -353,12 +353,21 @@ const carStore = useCarStore()
 
 // ========== 通用 ==========
 const activeTab = ref('overview')
+const REAL_MAP_WIDTH = 1587.2
+const REAL_MAP_HEIGHT = 947.2
+const INSPECTION_CAR_POSITIONS: Record<number, { x: number; y: number }> = {
+  // 坐标基于真实 DOM 二维地图米制边界，分别覆盖储罐泵区、反应装置区、塔器公用工程区和东南应急装卸区。
+  1: { x: 450, y: 565 },
+  2: { x: 690, y: 500 },
+  3: { x: 925, y: 430 },
+  4: { x: 1125, y: 610 }
+}
 
 const carList = ref<CarItem[]>([
-  { id: 1, x: 150, y: 200 },
-  { id: 2, x: 480, y: 280 },
-  { id: 3, x: 250, y: 250 },
-  { id: 4, x: 150, y: 330 }
+  { id: 1, ...INSPECTION_CAR_POSITIONS[1] },
+  { id: 2, ...INSPECTION_CAR_POSITIONS[2] },
+  { id: 3, ...INSPECTION_CAR_POSITIONS[3] },
+  { id: 4, ...INSPECTION_CAR_POSITIONS[4] }
 ])
 
 const mapContainer = ref<HTMLElement | null>(null)
@@ -426,9 +435,11 @@ const goToYoloMonitor = () => {
   router.push('/yolo')
 }
 
-// ========== 图片加载兜底 ==========
+// ========== 真实二维地图加载状态 ==========
 const handleImgError = (e) => {
-  e.target.src = 'https://picsum.photos/1000/600'
+  mapImgLoaded.value = false
+  e.target.style.display = 'none'
+  ElMessage.error('真实二维地图加载失败，请检查 /maps/real-park-dom.jpg')
 }
 
 const onMapImgLoad = () => {
@@ -436,6 +447,17 @@ const onMapImgLoad = () => {
   nextTick(() => {
     initCharts()
   })
+}
+
+const applyInspectionCarPositions = () => {
+  carList.value = carList.value.map(car => ({
+    ...car,
+    ...(INSPECTION_CAR_POSITIONS[car.id] || {})
+  }))
+  carStore.carList = carStore.carList.map(car => ({
+    ...car,
+    ...(INSPECTION_CAR_POSITIONS[car.id] || {})
+  }))
 }
 
 // ========== 小车状态 ==========
@@ -451,8 +473,8 @@ const getCarPosition = (id) => {
 const getMarkerStyle = computed(() => (car) => {
   return {
     position: 'absolute',
-    top: `${car.y}px`,
-    left: `${car.x}px`,
+    top: `${(car.y / REAL_MAP_HEIGHT) * 100}%`,
+    left: `${(car.x / REAL_MAP_WIDTH) * 100}%`,
     transform: 'translate(-50%, -50%) !important',
     zIndex: getCarStatus(car.id) === 'warning' ? 999 : 100
   }
@@ -598,9 +620,9 @@ const formatWarningTime = (timeStr) => {
 
 const fetchWarningHistory = async () => {
   try {
-    const res = await axios.get((import.meta.env.VITE_APP_BASE_API || '/api') + '/history/list')
-    if (res.data.code === 200) {
-      warningHistory.value = res.data.data
+    const res = await request.get('/history/list')
+    if (res.code === 200) {
+      warningHistory.value = res.data
       renderAlertsChart()
     }
   } catch (error) {
@@ -673,7 +695,9 @@ watch(
 
 // ========== 生命周期 ==========
 onMounted(async () => {
+  applyInspectionCarPositions()
   await carStore.fetchCarDataFromDB()
+  applyInspectionCarPositions()
 
   nextTick(() => {
     const img = mapContainer.value?.querySelector('.map-img')
@@ -704,11 +728,12 @@ onUnmounted(() => {
   box-sizing: border-box;
   background: transparent;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .background-image {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   width: 100%;
@@ -727,7 +752,9 @@ onUnmounted(() => {
 
 /* ===== Tabs ===== */
 .integrated-tabs {
-  margin: 0 24px;
+  width: min(100%, 1760px);
+  margin: 0 auto;
+  padding: 0 24px 28px;
   background: transparent;
 }
 
@@ -834,29 +861,37 @@ onUnmounted(() => {
 }
 
 .content {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 25px;
-  gap: 25px;
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(520px, 1fr) minmax(220px, 300px);
+  align-items: stretch;
+  padding: 24px 0;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
 }
 
 .chart-group {
-  width: 25%;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 25px;
+  gap: 16px;
+  min-width: 0;
 }
 .chart-item {
   background: rgba(10, 25, 50, 0.6);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  padding: 20px;
+  padding: 16px;
   border-radius: 12px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(64, 224, 208, 0.2);
   transition: transform 0.3s, box-shadow 0.3s;
   color: #e0e6ed;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .chart-item:hover {
   transform: translateY(-5px);
@@ -870,7 +905,7 @@ onUnmounted(() => {
   margin-bottom: 15px;
 }
 .gas-type {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: #40e0d0;
   text-shadow: 0 0 10px rgba(64, 224, 208, 0.5), 0 0 20px rgba(64, 224, 208, 0.3);
@@ -897,23 +932,27 @@ onUnmounted(() => {
 
 .chart {
   width: 100%;
-  height: 180px;
+  flex: 1 1 auto;
+  min-height: 168px;
 }
 
 .map-container {
-  width: 48%;
+  flex: 1 1 60%;
+  min-width: 0;
   background: rgba(10, 25, 50, 0.6);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  padding: 20px;
+  padding: 16px;
   border-radius: 12px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(64, 224, 208, 0.2);
   text-align: center;
   color: #e0e6ed;
+  display: flex;
+  flex-direction: column;
 }
 .map-container h3 {
-  margin: 0 0 20px 0;
+  margin: 0 0 14px 0;
   font-size: 20px;
   font-weight: 700;
   color: #40e0d0;
@@ -924,10 +963,13 @@ onUnmounted(() => {
 .map {
   position: relative;
   width: 100%;
-  height: 450px;
+  aspect-ratio: 1587.2 / 947.2;
+  min-height: 0;
+  flex: 1 1 auto;
+  max-height: 610px;
   border: 1px solid rgba(64, 224, 208, 0.2);
   border-radius: 8px;
-  overflow: visible;
+  overflow: hidden;
   background: rgba(0, 0, 0, 0.3);
   box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
 }
@@ -935,6 +977,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
 }
 .markers-container {
@@ -947,20 +990,23 @@ onUnmounted(() => {
 }
 .car-marker {
   position: absolute !important;
-  padding: 10px 16px;
-  border-radius: 20px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
   color: white;
-  font-size: 14px;
+  font-size: 10px;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
   transition: transform 0.2s;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   pointer-events: auto;
   transform: translate(-50%, -50%) !important;
   z-index: 9999;
-  border: 2px solid rgba(255, 255, 255, 0.8);
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(4px);
 }
 .car-marker:hover {
@@ -990,13 +1036,15 @@ onUnmounted(() => {
 }
 .car-id {
   font-weight: 900;
-  font-size: 16px;
-  letter-spacing: 1px;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0;
   text-shadow: 0 0 5px rgba(0, 0, 0, 0.8), 0 0 10px rgba(255, 255, 255, 0.5);
   margin-bottom: 2px;
 }
 .car-status {
-  font-size: 12px;
+  font-size: 8px;
+  line-height: 1;
   font-weight: 700;
   opacity: 1;
   text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
@@ -1004,7 +1052,7 @@ onUnmounted(() => {
 
 /* 预警模拟模块样式 */
 .simulate-section {
-  margin: 0 25px 25px 25px;
+  margin: 10px 0 0;
   padding: 25px;
   background: rgba(10, 25, 50, 0.6);
   backdrop-filter: blur(10px);
@@ -1298,15 +1346,19 @@ onUnmounted(() => {
 .map-preview {
   position: relative;
   flex: 1;
+  aspect-ratio: 1587.2 / 947.2;
   border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
   border: 1px solid rgba(64, 224, 208, 0.2);
-  max-width: 600px;
+  max-width: 720px;
+  background: rgba(0, 0, 0, 0.3);
 }
 
 .map-preview-img {
   width: 100%;
+  height: 100%;
+  object-fit: contain;
   display: block;
   transition: transform 0.3s;
 }
@@ -1467,11 +1519,44 @@ onUnmounted(() => {
 }
 
 /* 响应式 */
+@media (max-width: 1680px) {
+  .integrated-tabs {
+    width: 100%;
+    padding-inline: 18px;
+  }
+  .content {
+    grid-template-columns: minmax(210px, 275px) minmax(480px, 1fr) minmax(210px, 275px);
+    gap: 14px;
+  }
+  .chart-item {
+    padding: 14px;
+  }
+  .gas-type {
+    font-size: 16px;
+  }
+  .chart {
+    min-height: 154px;
+  }
+  .map-container {
+    padding: 14px;
+  }
+}
+
 @media (max-width: 1400px) {
-  .content { flex-direction: column; align-items: center; }
-  .chart-group, .map-container { width: 100%; }
-  .chart-group { flex-direction: row; flex-wrap: wrap; }
-  .chart-item { width: 48%; }
+  .integrated-tabs { padding: 0 18px 24px; }
+  .content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .chart-group,
+  .map-container {
+    width: 100%;
+    min-width: 0;
+  }
+  .chart-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .chart-item { width: 100%; min-height: 260px; }
   .map-tab-body { flex-direction: column; }
   .map-preview { max-width: 100%; }
   .map-info { flex: none; width: 100%; text-align: center; }

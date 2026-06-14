@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import axios from 'axios'
+import request from '@/utils/request'
 
 // 完整小车数据接口（包含坐标，用于管理页）
 export interface CarItem {
@@ -22,9 +22,6 @@ interface GasThreshold {
   }
 }
 
-// 后端接口地址
-const API_BASE = (import.meta.env.VITE_APP_BASE_API || '/api') + '/car'
-
 export const useCarStore = defineStore('car', {
   state: (): {
     carList: CarItem[]; // 管理页用（含坐标）
@@ -33,10 +30,10 @@ export const useCarStore = defineStore('car', {
   } => ({
     // 管理页完整数据（初始值）
     carList: [
-      { id: 1, x: 150, y: 200, status: 'normal' },
-      { id: 2, x: 480, y: 280, status: 'normal' },
-      { id: 3, x: 250, y: 250, status: 'warning' },
-      { id: 4, x: 150, y: 330, status: 'normal' }
+      { id: 1, x: 450, y: 565, status: 'normal' },
+      { id: 2, x: 690, y: 500, status: 'normal' },
+      { id: 3, x: 925, y: 430, status: 'warning' },
+      { id: 4, x: 1125, y: 610, status: 'normal' }
     ],
     // 状态列表（供 Home/Detail 使用）
     carStatusList: [
@@ -56,10 +53,10 @@ export const useCarStore = defineStore('car', {
     // 核心：从后端加载所有小车数据（含坐标+状态）
     async fetchCarDataFromDB() {
       try {
-        const res = await axios.get(`${API_BASE}/getAllCars`)
-        if (res.data.code === 200) {
+        const res: any = await request.get('/car/getAllCars')
+        if (res.code === 200) {
           // 格式化后端数据为前端结构
-          const formatCarList: CarItem[] = res.data.data.map((item: { carId: number; x: number; y: number; warning: number }) => ({
+          const formatCarList: CarItem[] = res.data.map((item: { carId: number; x: number; y: number; warning: number }) => ({
             id: item.carId,
             x: item.x,
             y: item.y,
@@ -79,7 +76,7 @@ export const useCarStore = defineStore('car', {
     async setCarWarning(carId: number): Promise<void> {
       try {
         // 1. 同步到后端
-        await axios.post(`${API_BASE}/setWarning`, { carId })
+        await request.post('/car/setWarning', { carId })
         // 2. 更新本地状态
         const car = this.carList.find(item => item.id === carId)
         const statusItem = this.carStatusList.find(item => item.id === carId)
@@ -95,7 +92,7 @@ export const useCarStore = defineStore('car', {
     async resetCarStatus(carId: number): Promise<void> {
       try {
         // 1. 同步到后端
-        await axios.post(`${API_BASE}/resetStatus`, { carId })
+        await request.post('/car/resetStatus', { carId })
         // 2. 更新本地状态
         const car = this.carList.find(item => item.id === carId)
         const statusItem = this.carStatusList.find(item => item.id === carId)

@@ -53,7 +53,7 @@
         <!-- 右侧个人头像区域 -->
         <div class="user_info">
           <div class="avatar_box">
-            <el-avatar size="48" :src="avatar" class="user_avatar">
+            <el-avatar :size="48" :src="avatar" class="user_avatar">
               <span class="avatar_text">管理员</span>
             </el-avatar>
           </div>
