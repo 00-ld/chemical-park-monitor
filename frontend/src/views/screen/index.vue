@@ -1,7 +1,5 @@
 <template>
   <section class="iportal-screen">
-    <WarningContextBar class="screen-warning-bar" />
-
     <div v-if="loading" class="screen-state loading-state">
       <div class="state-ring"></div>
       <div>
@@ -36,7 +34,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import WarningContextBar from '@/components/WarningContextBar/index.vue'
 
 defineOptions({
   name: 'IportalScreen',
@@ -86,15 +83,6 @@ const reloadDashboard = () => {
   height: 100%;
   border: 0;
   background: #071526;
-}
-
-.screen-warning-bar {
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  z-index: 3;
-  width: min(980px, calc(100% - 32px));
-  transform: translateX(-50%);
 }
 
 .screen-state {

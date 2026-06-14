@@ -5,7 +5,7 @@
 
     <div v-if="linkedWarning" class="linked-warning-card">
       <div>
-        <div class="linked-kicker">来自{{ formatContextSource(linkedWarning.source) }}的联动事件</div>
+        <div class="linked-kicker">来自{{ linkedWarning.source === 'home' ? '首页' : '预警历史' }}的联动事件</div>
         <div class="linked-title">
           小车 {{ linkedWarning.carId || '--' }} · {{ linkedWarning.gasType || '未知气体' }}
         </div>
@@ -338,7 +338,6 @@ import * as echarts from 'echarts'
 import { Clock, DataLine, MapLocation, View, Monitor, FullScreen, VideoCamera } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { getCurrentWarningContext, withWarningQuery } from '@/utils/warningContext'
 
 interface CarItem {
   id: number
@@ -366,18 +365,17 @@ const router = useRouter()
 const route = useRoute()
 const carStore = useCarStore()
 
-const linkedWarning = computed(() => getCurrentWarningContext(route.query))
-
-const formatContextSource = (source?: string) => {
-  const sourceMap: Record<string, string> = {
-    home: '首页',
-    history: '预警历史',
-    car: '智巡监测',
-    menu: '顶部菜单',
-    'link-bar': '联动条',
+const linkedWarning = computed(() => {
+  if (!route.query.warningId && !route.query.carId) return null
+  return {
+    warningId: String(route.query.warningId || ''),
+    carId: String(route.query.carId || ''),
+    gasType: String(route.query.gasType || ''),
+    x: String(route.query.x || ''),
+    y: String(route.query.y || ''),
+    source: String(route.query.source || 'history'),
   }
-  return sourceMap[source || ''] || '预警联动'
-}
+})
 
 // ========== 通用 ==========
 const activeTab = ref('overview')
@@ -446,7 +444,7 @@ const goToHome = () => {
 const goToCarDetail = (id) => {
   router.push({
     path: `/car/${id}`,
-    query: withWarningQuery({ t: new Date().getTime() }, linkedWarning.value, 'car')
+    query: { t: new Date().getTime() }
   }).catch(err => {
     if (!err.message.includes('Avoided redundant navigation')) {
       console.error('跳转失败:', err)
@@ -456,24 +454,22 @@ const goToCarDetail = (id) => {
 
 // ========== 导航函数（智慧地图 / 厂区实时监测） ==========
 const goToSmartMap = () => {
-  router.push({
-    path: '/smart-map',
-    query: withWarningQuery({ autoConfig: linkedWarning.value ? 'true' : undefined }, linkedWarning.value, 'car'),
-  })
+  router.push('/smart-map')
 }
 
 const goToYoloMonitor = () => {
-  router.push({
-    path: '/yolo',
-    query: withWarningQuery({}, linkedWarning.value, 'car'),
-  })
+  router.push('/yolo')
 }
 
 const openLinkedWarningMap = () => {
   if (!linkedWarning.value) return
   router.push({
     path: '/smart-map',
-    query: withWarningQuery({ autoConfig: 'true' }, linkedWarning.value, 'car'),
+    query: {
+      ...linkedWarning.value,
+      autoConfig: 'true',
+      source: 'car',
+    },
   })
 }
 
@@ -481,7 +477,10 @@ const openLinkedWarningYolo = () => {
   if (!linkedWarning.value) return
   router.push({
     path: '/yolo',
-    query: withWarningQuery({}, linkedWarning.value, 'car'),
+    query: {
+      ...linkedWarning.value,
+      source: 'car',
+    },
   })
 }
 

@@ -122,7 +122,6 @@
         <div class="workflow-actions">
           <el-button type="primary" @click="openWarningInMap(latestWarning)">地图定位</el-button>
           <el-button type="success" @click="openWarningInCar(latestWarning)">调度智巡</el-button>
-          <el-button type="info" @click="openWarningInMonitor(latestWarning)">视频核验</el-button>
           <el-button type="warning" @click="openWarningInYolo(latestWarning)">AI 复核</el-button>
         </div>
       </div>
@@ -277,6 +276,7 @@ const normalizeGasType = (gasType: string | null | undefined) => {
   if (raw.includes('O2') || raw.includes('O₂') || raw.includes('氧气')) return 'O2'
   if (raw.includes('NH3') || raw.includes('NH₃') || raw.includes('氨')) return 'NH3'
   if (raw.includes('CH4') || raw.includes('CH₄') || raw.includes('甲烷') || raw.includes('可燃')) return 'CH4'
+  if (raw.includes('H2S') || raw.includes('H₂S') || raw.includes('硫化氢')) return 'NH3'
   return ''
 }
 
@@ -363,12 +363,9 @@ const fetchHistory = async () => {
 const buildWarningQuery = (item: HistoryItem) => ({
   warningId: String(item.id ?? ''),
   carId: String(item.carId || ''),
-  areaName: String(item.areaName || ''),
   gasType: formatGasType(item.gasType),
-  gasValue: String(item.gasValue ?? ''),
   x: String(item.x ?? ''),
   y: String(item.y ?? ''),
-  monitorId: String(item.carId || '1'),
   source: 'home',
 })
 
@@ -392,13 +389,6 @@ const openWarningInCar = (item: HistoryItem) => {
 const openWarningInYolo = (item: HistoryItem) => {
   router.push({
     path: '/yolo',
-    query: buildWarningQuery(item),
-  })
-}
-
-const openWarningInMonitor = (item: HistoryItem) => {
-  router.push({
-    path: `/monitor/${item.carId || 1}`,
     query: buildWarningQuery(item),
   })
 }
